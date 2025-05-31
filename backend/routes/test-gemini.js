@@ -9,8 +9,7 @@ router.get('/test', async (req, res) => {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });    
     const result = await model.generateContent("Test message");
     const text = result.response.text();
 
