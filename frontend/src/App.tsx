@@ -28,6 +28,11 @@ const App: React.FC = () => {
   const [sortField, setSortField] = useState<keyof Word>('word');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50); // 50 item per page
+  const [totalWords, setTotalWords] = useState(0);
 
   // Fetch words from backend
   useEffect(() => {
@@ -47,6 +52,7 @@ const App: React.FC = () => {
       
       const data: ApiResponse = await response.json();
       setWords(data.words);
+      setTotalWords(data.total);
       console.log(`✅ ${data.words.length} kelime yüklendi`);
       
     } catch (err) {
@@ -68,10 +74,17 @@ const App: React.FC = () => {
   };
 
   const handleSelectAll = () => {
-    if (selectedWordIds.size === words.length) {
-      setSelectedWordIds(new Set());
+    const currentPageWords = getCurrentPageWords();
+    if (isAllCurrentPageSelected()) {
+      // Unselect all on current page
+      const newSelected = new Set(selectedWordIds);
+      currentPageWords.forEach(word => newSelected.delete(word.id));
+      setSelectedWordIds(newSelected);
     } else {
-      setSelectedWordIds(new Set(words.map(word => word.id)));
+      // Select all on current page
+      const newSelected = new Set(selectedWordIds);
+      currentPageWords.forEach(word => newSelected.add(word.id));
+      setSelectedWordIds(newSelected);
     }
   };
 
@@ -161,6 +174,26 @@ const App: React.FC = () => {
     return 0;
   });
 
+  // Pagination functions
+  const getCurrentPageWords = () => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedWords.slice(startIndex, endIndex);
+  };
+
+  const getTotalPages = () => {
+    return Math.ceil(sortedWords.length / itemsPerPage);
+  };
+
+  const isAllCurrentPageSelected = () => {
+    const currentPageWords = getCurrentPageWords();
+    return currentPageWords.length > 0 && currentPageWords.every(word => selectedWordIds.has(word.id));
+  };
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+  };
+
   if (loading) {
     return (
       <div className="app">
@@ -188,6 +221,9 @@ const App: React.FC = () => {
     );
   }
 
+  const currentPageWords = getCurrentPageWords();
+  const totalPages = getTotalPages();
+
   return (
     <div className="app">
       <header className="header">
@@ -203,7 +239,7 @@ const App: React.FC = () => {
           className={`tab ${activeTab === 'combinations' ? 'active' : ''}`}
           onClick={() => setActiveTab('combinations')}
         >
-          📋 Üçlü Kombinasyonlar ({words.length})
+          📋 Üçlü Kombinasyonlar ({totalWords})
         </button>
         <button 
           className={`tab ${activeTab === 'words' ? 'active' : ''}`}
@@ -228,6 +264,14 @@ const App: React.FC = () => {
       <main className="main-content">
         {activeTab === 'combinations' && (
           <div className="tab-content">
+            {/* Pagination Info */}
+            <div className="pagination-info" style={{marginBottom: '1rem', padding: '1rem', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)'}}>
+              <p>
+                <strong>{itemsPerPage * (currentPage - 1) + 1} - {Math.min(itemsPerPage * currentPage, totalWords)}</strong> / {totalWords} kelime gösteriliyor
+                {selectedWordIds.size > 0 && ` | ${selectedWordIds.size} kelime seçili`}
+              </p>
+            </div>
+
             <div className="table-container">
               <table className="words-table">
                 <thead>
@@ -235,7 +279,7 @@ const App: React.FC = () => {
                     <th>
                       <input
                         type="checkbox"
-                        checked={selectedWordIds.size === words.length && words.length > 0}
+                        checked={isAllCurrentPageSelected()}
                         onChange={handleSelectAll}
                         disabled={isGenerating}
                       />
@@ -255,7 +299,7 @@ const App: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedWords.map((word) => (
+                  {currentPageWords.map((word) => (
                     <tr key={word.id} className={selectedWordIds.has(word.id) ? 'selected' : ''}>
                       <td>
                         <input
@@ -284,6 +328,61 @@ const App: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="pagination" style={{marginTop: '1rem', textAlign: 'center'}}>
+                <button 
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  style={{margin: '0 0.25rem', padding: '0.5rem 1rem', border: '1px solid #ddd', background: currentPage === 1 ? '#f5f5f5' : 'white', cursor: currentPage === 1 ? 'not-allowed' : 'pointer'}}
+                >
+                  ◀ Önceki
+                </button>
+                
+                {Array.from({length: Math.min(5, totalPages)}, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      style={{
+                        margin: '0 0.25rem',
+                        padding: '0.5rem 1rem',
+                        border: '1px solid #ddd',
+                        background: currentPage === pageNum ? '#6366f1' : 'white',
+                        color: currentPage === pageNum ? 'white' : 'black',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                
+                <button 
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  style={{margin: '0 0.25rem', padding: '0.5rem 1rem', border: '1px solid #ddd', background: currentPage === totalPages ? '#f5f5f5' : 'white', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'}}
+                >
+                  Sonraki ▶
+                </button>
+                
+                <span style={{marginLeft: '1rem', color: '#666'}}>
+                  Sayfa {currentPage} / {totalPages}
+                </span>
+              </div>
+            )}
           </div>
         )}
         
