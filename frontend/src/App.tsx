@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import config from './config';
 
 // Types
 interface Word {
@@ -26,6 +27,7 @@ const App: React.FC = () => {
   const [selectedWordIds, setSelectedWordIds] = useState<Set<number>>(new Set());
   const [sortField, setSortField] = useState<keyof Word>('word');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Fetch words from backend
   useEffect(() => {
@@ -35,7 +37,9 @@ const App: React.FC = () => {
   const fetchWords = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5001/api/words');
+      setError(null);
+      
+      const response = await fetch(`${config.API_URL}${config.ENDPOINTS.WORDS}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -43,7 +47,10 @@ const App: React.FC = () => {
       
       const data: ApiResponse = await response.json();
       setWords(data.words);
+      console.log(`✅ ${data.words.length} kelime yüklendi`);
+      
     } catch (err) {
+      console.error('❌ Fetch words hatası:', err);
       setError(err instanceof Error ? err.message : 'Veri yüklenirken hata oluştu');
     } finally {
       setLoading(false);
@@ -74,11 +81,17 @@ const App: React.FC = () => {
       return;
     }
 
-    const confirmed = window.confirm(`${selectedWordIds.size} kelime için sorular oluşturulsun mu?`);
+    const confirmed = window.confirm(
+      `${selectedWordIds.size} kelime için sorular oluşturulsun mu?\n\n` +
+      `⚠️ Bu işlem ${selectedWordIds.size} dakika kadar sürebilir.`
+    );
     if (!confirmed) return;
 
     try {
-      const response = await fetch('http://localhost:5001/api/questions/generate', {
+      setIsGenerating(true);
+      console.log(`🚀 ${selectedWordIds.size} kelime için soru oluşturma başladı...`);
+
+      const response = await fetch(`${config.API_URL}${config.ENDPOINTS.GENERATE_QUESTIONS}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -89,18 +102,31 @@ const App: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      alert(`✅ ${selectedWordIds.size} kelime için sorular başarıyla oluşturuldu!`);
+      
+      console.log('✅ Soru oluşturma tamamlandı:', result);
+      
+      // Başarı mesajı
+      const successMsg = `✅ Soru oluşturma tamamlandı!\n\n` +
+        `📊 Başarılı: ${result.successful}\n` +
+        `❌ Hatalı: ${result.failed}\n` +
+        `📈 Başarı oranı: ${result.success_rate}`;
+      
+      alert(successMsg);
       
       // Refresh the data and clear selection
       await fetchWords();
       setSelectedWordIds(new Set());
       
     } catch (err) {
+      console.error('❌ Generate questions hatası:', err);
       alert('❌ Soru oluşturulurken hata: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -139,7 +165,9 @@ const App: React.FC = () => {
     return (
       <div className="app">
         <div className="loading">
+          <div>🔄</div>
           <p>Kelimeler yükleniyor...</p>
+          <small>Backend: {config.API_URL}</small>
         </div>
       </div>
     );
@@ -149,8 +177,9 @@ const App: React.FC = () => {
     return (
       <div className="app">
         <div className="error">
-          <h2>❌ Hata</h2>
+          <h2>❌ Bağlantı Hatası</h2>
           <p>{error}</p>
+          <small>Backend: {config.API_URL}</small>
           <button onClick={fetchWords}>
             🔄 Tekrar Dene
           </button>
@@ -164,6 +193,9 @@ const App: React.FC = () => {
       <header className="header">
         <h1>🧠 Question Generator</h1>
         <p>Gemini AI ile İngilizce kelimeler için quiz soruları oluşturun</p>
+        {process.env.NODE_ENV === 'development' && (
+          <small style={{opacity: 0.7}}>Backend: {config.API_URL}</small>
+        )}
       </header>
 
       <nav className="tabs">
@@ -205,6 +237,7 @@ const App: React.FC = () => {
                         type="checkbox"
                         checked={selectedWordIds.size === words.length && words.length > 0}
                         onChange={handleSelectAll}
+                        disabled={isGenerating}
                       />
                     </th>
                     <th onClick={() => handleSort('word')} className="sortable">
@@ -229,6 +262,7 @@ const App: React.FC = () => {
                           type="checkbox"
                           checked={selectedWordIds.has(word.id)}
                           onChange={() => handleSelectWord(word.id)}
+                          disabled={isGenerating}
                         />
                       </td>
                       <td className="word-cell">
@@ -284,14 +318,22 @@ const App: React.FC = () => {
                 : 'Kelime seçilmedi'
               }
             </span>
+            {isGenerating && (
+              <div style={{color: '#f59e0b', fontWeight: 'bold'}}>
+                🔄 Sorular oluşturuluyor...
+              </div>
+            )}
           </div>
           
           <button 
             onClick={handleGenerateQuestions}
-            disabled={selectedWordIds.size === 0}
+            disabled={selectedWordIds.size === 0 || isGenerating}
             className="generate-btn"
           >
-            🤖 Seçilenleri Gemini'ye Gönder ({selectedWordIds.size})
+            {isGenerating 
+              ? '⏳ Oluşturuluyor...' 
+              : `🤖 Seçilenleri Gemini'ye Gönder (${selectedWordIds.size})`
+            }
           </button>
         </div>
       )}
