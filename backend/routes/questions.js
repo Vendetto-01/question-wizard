@@ -16,26 +16,25 @@ async function generateQuestion(word, partOfSpeech, definition) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-Aşağıdaki İngilizce kelime için Türkçe bir quiz sorusu oluştur:
+Aşağıdaki İngilizce kelime için Türkçe quiz sorusu oluştur ve JSON formatında döndür:
 
 Kelime: ${word}
 Kelime türü: ${partOfSpeech}
 Tanım: ${definition}
 
-Görev:
-1. Bu kelimeyi doğru anlamda kullanan 1 cümlelik İngilizce paragraf yaz
-2. "Bu paragraftaki '${word}' kelimesinin anlamı nedir?" sorusunu sor
-3. 4 tane Türkçe şık oluştur (1 doğru, 3 yanlış)
+Kurallar:
+1. TEK CÜMLELİK İngilizce paragraf yaz (kelimeyi doğru anlamda kullan)
+2. Soru: "Bu paragraftaki '${word}' kelimesinin anlamı nedir?"
+3. 1 doğru + 3 yanlış Türkçe anlam oluştur
+4. Sadece JSON döndür, başka metin yazma
 
-Format:
-PARAGRAF: [paragraf buraya]
-SORU: Bu paragraftaki '${word}' kelimesinin anlamı nedir?
-A) [doğru türkçe anlam]
-B) [yanlış türkçe anlam]
-C) [yanlış türkçe anlam]
-D) [yanlış türkçe anlam]
-DOĞRU: A
-`;
+JSON Format:
+{
+  "paragraph": "Tek cümlelik İngilizce paragraf burada",
+  "question": "Bu paragraftaki '${word}' kelimesinin anlamı nedir?",
+  "correct_answer": "Doğru Türkçe anlam",
+  "wrong_answers": ["Yanlış anlam 1", "Yanlış anlam 2", "Yanlış anlam 3"]
+}`;
 
     const result = await model.generateContent(prompt);
     const response = result.response;
@@ -48,44 +47,43 @@ DOĞRU: A
 }
 
 // Gemini response'unu parse et
+// Gemini response'unu parse et
 function parseGeminiResponse(response) {
   try {
-    const lines = response.split('\n').filter(line => line.trim());
+    // JSON'u temizle (bazen başında/sonunda extra metin olabiliyor)
+    let cleanJson = response.trim();
     
-    let paragraph = '';
-    let question = '';
-    let options = {};
-    let correctAnswer = '';
+    // ```json ve ``` etiketlerini kaldır
+    cleanJson = cleanJson.replace(/```json\n?/g, '');
+    cleanJson = cleanJson.replace(/```\n?/g, '');
+    cleanJson = cleanJson.trim();
     
-    for (const line of lines) {
-      if (line.startsWith('PARAGRAF:')) {
-        paragraph = line.replace('PARAGRAF:', '').trim();
-      } else if (line.startsWith('SORU:')) {
-        question = line.replace('SORU:', '').trim();
-      } else if (line.match(/^[A-D]\)/)) {
-        const option = line.substring(0, 1);
-        const text = line.substring(2).trim();
-        options[option] = text;
-      } else if (line.startsWith('DOĞRU:')) {
-        correctAnswer = line.replace('DOĞRU:', '').trim();
-      }
+    // JSON parse et
+    const jsonData = JSON.parse(cleanJson);
+    
+    // Validation - gerekli alanlar var mı?
+    if (!jsonData.paragraph || !jsonData.question || !jsonData.correct_answer || !jsonData.wrong_answers) {
+      throw new Error('JSON response eksik alanlar içeriyor');
     }
     
-    // Validation
-    if (!paragraph || !question || Object.keys(options).length !== 4 || !correctAnswer) {
-      throw new Error('Gemini response eksik bilgi içeriyor');
+    if (!Array.isArray(jsonData.wrong_answers) || jsonData.wrong_answers.length !== 3) {
+      throw new Error('wrong_answers 3 elemanlı array olmalı');
     }
     
+    // Yeni formata dönüştür
     return {
-      paragraph,
-      question,
-      options,
-      correct_answer: correctAnswer
+      paragraph: jsonData.paragraph,
+      question: jsonData.question,
+      option_a: jsonData.correct_answer,      // Doğru cevap hep A
+      option_b: jsonData.wrong_answers[0],    // 1. yanlış cevap
+      option_c: jsonData.wrong_answers[1],    // 2. yanlış cevap  
+      option_d: jsonData.wrong_answers[2]     // 3. yanlış cevap
     };
     
   } catch (error) {
-    console.error('Response parse hatası:', error.message);
-    throw new Error(`Response parse hatası: ${error.message}`);
+    console.error('JSON parse hatası:', error.message);
+    console.error('Raw response:', response);
+    throw new Error(`JSON parse hatası: ${error.message}`);
   }
 }
 
@@ -150,18 +148,17 @@ router.post('/generate', async (req, res) => {
         // Response'u parse et
         const parsedQuestion = parseGeminiResponse(geminiResponse);
         
-        // Soruyu veritabanına kaydet
+        /// Soruyu veritabanına kaydet
         const { data: question, error: insertError } = await req.supabase
           .from('questions')
           .insert({
             word_id: word.id,
-            question_text: parsedQuestion.question,
             paragraph: parsedQuestion.paragraph,
-            option_a: parsedQuestion.options.A,
-            option_b: parsedQuestion.options.B,
-            option_c: parsedQuestion.options.C,
-            option_d: parsedQuestion.options.D,
-            correct_answer: parsedQuestion.correct_answer,
+            question_text: parsedQuestion.question,
+            option_a: parsedQuestion.option_a,  // Doğru cevap
+            option_b: parsedQuestion.option_b,  // Yanlış cevap 1
+            option_c: parsedQuestion.option_c,  // Yanlış cevap 2
+            option_d: parsedQuestion.option_d,  // Yanlış cevap 3
             created_at: new Date().toISOString()
           })
           .select()
