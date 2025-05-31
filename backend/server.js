@@ -27,6 +27,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/words', require('./routes/words'));
 app.use('/api/questions', require('./routes/questions'));
+app.use('/api/test', require('./routes/test-gemini'));
 
 app.listen(PORT, () => {
   console.log(`Question Generator Server running on port ${PORT}`);
