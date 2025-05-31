@@ -407,7 +407,7 @@ const App: React.FC = () => {
               </button>
               
               {totalPages > 1 && Array.from({length: Math.min(7, totalPages)}, (_, i) => {
-                let pageNum;
+                let pageNum: number;
                 if (totalPages <= 7) {
                   pageNum = i + 1;
                 } else if (currentPage <= 4) {
