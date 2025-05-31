@@ -1,7 +1,7 @@
 // src/config.js
 const config = {
-  // Production'da environment variable'dan al, development'da localhost kullan
-  API_URL: process.env.REACT_APP_API_URL || 'http://localhost:5001',
+  // REACT_APP_BACKEND_URL'i kullan (sizin environment variable'ınız)
+  API_URL: process.env.REACT_APP_BACKEND_URL || 'http://localhost:5001',
   
   // API endpoints
   ENDPOINTS: {
