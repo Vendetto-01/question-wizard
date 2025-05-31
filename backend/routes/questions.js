@@ -13,7 +13,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // Gemini'den soru oluştur
 async function generateQuestion(word, partOfSpeech, definition) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
 Aşağıdaki İngilizce kelime için Türkçe bir quiz sorusu oluştur:
