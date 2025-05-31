@@ -31,8 +31,11 @@ const App: React.FC = () => {
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(50); // 50 item per page
+  const [itemsPerPage, setItemsPerPage] = useState(10); // Default 10, kullanıcı değiştirebilir
   const [totalWords, setTotalWords] = useState(0);
+
+  // Sayfa boyutu seçenekleri
+  const pageSizeOptions = [10, 20, 30, 40, 50];
 
   // Fetch words from backend
   useEffect(() => {
@@ -194,6 +197,12 @@ const App: React.FC = () => {
     setCurrentPage(page);
   };
 
+  // Sayfa boyutu değiştiğinde çağrılır
+  const handlePageSizeChange = (newSize: number) => {
+    setItemsPerPage(newSize);
+    setCurrentPage(1); // İlk sayfaya dön
+  };
+
   if (loading) {
     return (
       <div className="app">
@@ -264,12 +273,50 @@ const App: React.FC = () => {
       <main className="main-content">
         {activeTab === 'combinations' && (
           <div className="tab-content">
-            {/* Pagination Info */}
-            <div className="pagination-info" style={{marginBottom: '1rem', padding: '1rem', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)'}}>
-              <p>
+            {/* Sayfa Kontrolleri */}
+            <div className="pagination-controls" style={{
+              marginBottom: '1rem', 
+              padding: '1rem', 
+              background: 'white', 
+              borderRadius: '8px', 
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '1rem'
+            }}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                <span style={{fontWeight: '500', color: '#374151'}}>Sayfa başına:</span>
+                <select 
+                  value={itemsPerPage} 
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  style={{
+                    padding: '0.5rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    backgroundColor: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {pageSizeOptions.map(size => (
+                    <option key={size} value={size}>{size} madde</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div style={{fontSize: '0.9rem', color: '#6b7280'}}>
                 <strong>{itemsPerPage * (currentPage - 1) + 1} - {Math.min(itemsPerPage * currentPage, totalWords)}</strong> / {totalWords} kelime gösteriliyor
-                {selectedWordIds.size > 0 && ` | ${selectedWordIds.size} kelime seçili`}
-              </p>
+                <span style={{marginLeft: '0.5rem', fontSize: '0.8rem', color: '#9ca3af'}}>
+                  (Sayfa: {currentPage}/{getTotalPages()})
+                </span>
+                {selectedWordIds.size > 0 && (
+                  <span style={{marginLeft: '1rem', color: '#059669', fontWeight: '600'}}>
+                    | {selectedWordIds.size} kelime seçili
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="table-container">
@@ -335,7 +382,14 @@ const App: React.FC = () => {
                 <button 
                   onClick={() => goToPage(currentPage - 1)}
                   disabled={currentPage === 1}
-                  style={{margin: '0 0.25rem', padding: '0.5rem 1rem', border: '1px solid #ddd', background: currentPage === 1 ? '#f5f5f5' : 'white', cursor: currentPage === 1 ? 'not-allowed' : 'pointer'}}
+                  style={{
+                    margin: '0 0.25rem', 
+                    padding: '0.5rem 1rem', 
+                    border: '1px solid #ddd', 
+                    background: currentPage === 1 ? '#f5f5f5' : 'white', 
+                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                    borderRadius: '6px'
+                  }}
                 >
                   ◀ Önceki
                 </button>
@@ -362,7 +416,8 @@ const App: React.FC = () => {
                         border: '1px solid #ddd',
                         background: currentPage === pageNum ? '#6366f1' : 'white',
                         color: currentPage === pageNum ? 'white' : 'black',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        borderRadius: '6px'
                       }}
                     >
                       {pageNum}
@@ -373,71 +428,5 @@ const App: React.FC = () => {
                 <button 
                   onClick={() => goToPage(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  style={{margin: '0 0.25rem', padding: '0.5rem 1rem', border: '1px solid #ddd', background: currentPage === totalPages ? '#f5f5f5' : 'white', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'}}
-                >
-                  Sonraki ▶
-                </button>
-                
-                <span style={{marginLeft: '1rem', color: '#666'}}>
-                  Sayfa {currentPage} / {totalPages}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {activeTab === 'words' && (
-          <div className="tab-content">
-            <h3>Sözcükler Sekmesi</h3>
-            <p>Bu sekme henüz geliştirilecek...</p>
-          </div>
-        )}
-        
-        {activeTab === 'pos' && (
-          <div className="tab-content">
-            <h3>Part of Speech Sekmesi</h3>
-            <p>Bu sekme henüz geliştirilecek...</p>
-          </div>
-        )}
-        
-        {activeTab === 'definitions' && (
-          <div className="tab-content">
-            <h3>Tanımlar Sekmesi</h3>
-            <p>Bu sekme henüz geliştirilecek...</p>
-          </div>
-        )}
-      </main>
-
-      {activeTab === 'combinations' && (
-        <div className="action-bar">
-          <div className="selection-info">
-            <span>
-              {selectedWordIds.size > 0 
-                ? `${selectedWordIds.size} kelime seçildi` 
-                : 'Kelime seçilmedi'
-              }
-            </span>
-            {isGenerating && (
-              <div style={{color: '#f59e0b', fontWeight: 'bold'}}>
-                🔄 Sorular oluşturuluyor...
-              </div>
-            )}
-          </div>
-          
-          <button 
-            onClick={handleGenerateQuestions}
-            disabled={selectedWordIds.size === 0 || isGenerating}
-            className="generate-btn"
-          >
-            {isGenerating 
-              ? '⏳ Oluşturuluyor...' 
-              : `🤖 Seçilenleri Gemini'ye Gönder (${selectedWordIds.size})`
-            }
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default App;
+                  style={{
+                    margin
