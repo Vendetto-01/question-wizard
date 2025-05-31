@@ -376,57 +376,152 @@ const App: React.FC = () => {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="pagination" style={{marginTop: '1rem', textAlign: 'center'}}>
-                <button 
-                  onClick={() => goToPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  style={{
-                    margin: '0 0.25rem', 
-                    padding: '0.5rem 1rem', 
-                    border: '1px solid #ddd', 
-                    background: currentPage === 1 ? '#f5f5f5' : 'white', 
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    borderRadius: '6px'
-                  }}
-                >
-                  ◀ Önceki
-                </button>
+            {/* Pagination Controls - Her zaman göster */}
+            <div className="pagination" style={{
+              marginTop: '1rem', 
+              textAlign: 'center',
+              padding: '1rem',
+              background: 'white',
+              borderRadius: '8px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: '0.5rem',
+              flexWrap: 'wrap'
+            }}>
+              <button 
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                style={{
+                  padding: '0.5rem 1rem', 
+                  border: '1px solid #d1d5db', 
+                  background: currentPage === 1 ? '#f9fafb' : 'white', 
+                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                  borderRadius: '6px',
+                  color: currentPage === 1 ? '#9ca3af' : '#374151',
+                  fontWeight: '500'
+                }}
+              >
+                ◀ Önceki
+              </button>
+              
+              {totalPages > 1 && Array.from({length: Math.min(7, totalPages)}, (_, i) => {
+                let pageNum;
+                if (totalPages <= 7) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 4) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 3) {
+                  pageNum = totalPages - 6 + i;
+                } else {
+                  pageNum = currentPage - 3 + i;
+                }
                 
-                {Array.from({length: Math.min(5, totalPages)}, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => goToPage(pageNum)}
-                      style={{
-                        margin: '0 0.25rem',
-                        padding: '0.5rem 1rem',
-                        border: '1px solid #ddd',
-                        background: currentPage === pageNum ? '#6366f1' : 'white',
-                        color: currentPage === pageNum ? 'white' : 'black',
-                        cursor: 'pointer',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                
-                <button 
-                  onClick={() => goToPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  style={{
-                    margin
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => goToPage(pageNum)}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      border: '1px solid #d1d5db',
+                      background: currentPage === pageNum ? '#6366f1' : 'white',
+                      color: currentPage === pageNum ? 'white' : '#374151',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      fontWeight: currentPage === pageNum ? '600' : '500',
+                      minWidth: '40px'
+                    }}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              
+              <button 
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: '0.5rem 1rem', 
+                  border: '1px solid #d1d5db', 
+                  background: currentPage === totalPages ? '#f9fafb' : 'white', 
+                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                  borderRadius: '6px',
+                  color: currentPage === totalPages ? '#9ca3af' : '#374151',
+                  fontWeight: '500'
+                }}
+              >
+                Sonraki ▶
+              </button>
+              
+              <span style={{
+                marginLeft: '1rem', 
+                color: '#6b7280',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                padding: '0.5rem'
+              }}>
+                Sayfa {currentPage} / {totalPages} 
+                <span style={{marginLeft: '0.5rem', color: '#9ca3af'}}>
+                  (Toplam: {totalWords} kelime)
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
+        
+        {activeTab === 'words' && (
+          <div className="tab-content">
+            <h3>Sözcükler Sekmesi</h3>
+            <p>Bu sekme henüz geliştirilecek...</p>
+          </div>
+        )}
+        
+        {activeTab === 'pos' && (
+          <div className="tab-content">
+            <h3>Part of Speech Sekmesi</h3>
+            <p>Bu sekme henüz geliştirilecek...</p>
+          </div>
+        )}
+        
+        {activeTab === 'definitions' && (
+          <div className="tab-content">
+            <h3>Tanımlar Sekmesi</h3>
+            <p>Bu sekme henüz geliştirilecek...</p>
+          </div>
+        )}
+      </main>
+
+      {activeTab === 'combinations' && (
+        <div className="action-bar">
+          <div className="selection-info">
+            <span>
+              {selectedWordIds.size > 0 
+                ? `${selectedWordIds.size} kelime seçildi` 
+                : 'Kelime seçilmedi'
+              }
+            </span>
+            {isGenerating && (
+              <div style={{color: '#f59e0b', fontWeight: 'bold'}}>
+                🔄 Sorular oluşturuluyor...
+              </div>
+            )}
+          </div>
+          
+          <button 
+            onClick={handleGenerateQuestions}
+            disabled={selectedWordIds.size === 0 || isGenerating}
+            className="generate-btn"
+          >
+            {isGenerating 
+              ? '⏳ Oluşturuluyor...' 
+              : `🤖 Seçilenleri Gemini'ye Gönder (${selectedWordIds.size})`
+            }
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default App;
