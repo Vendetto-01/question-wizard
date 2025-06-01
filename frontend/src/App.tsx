@@ -1,96 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import './App.css';
-import config from './config';
-
-// Types
-interface Word {
-  id: number;
-  word: string;
-  part_of_speech: string;
-  definition: string;
-  question_count: number;
-}
-
-interface ApiResponse {
-  words: Word[];
-  total: number;
-}
-
-// Tab types
-type TabType = 'combinations' | 'words' | 'pos' | 'definitions';
-
-const App: React.FC = () => {
-  const [words, setWords] = useState<Word[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('combinations');
-  const [selectedWordIds, setSelectedWordIds] = useState<Set<number>>(new Set());
-  const [sortField, setSortField] = useState<keyof Word>('word');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [isGenerating, setIsGenerating] = useState(false);
-  
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10); // Default 10, kullanıcı değiştirebilir
-  const [totalWords, setTotalWords] = useState(0);
-
-  // Sayfa boyutu seçenekleri
-  const pageSizeOptions = [10, 20, 30, 40, 50];
-
-  // Fetch words from backend
-  useEffect(() => {
-    fetchWords();
-  }, []);
-
-  const fetchWords = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await fetch(`${config.API_URL}${config.ENDPOINTS.WORDS}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data: ApiResponse = await response.json();
-      setWords(data.words);
-      setTotalWords(data.total);
-      console.log(`✅ ${data.words.length} kelime yüklendi`);
-      
-    } catch (err) {
-      console.error('❌ Fetch words hatası:', err);
-      setError(err instanceof Error ? err.message : 'Veri yüklenirken hata oluştu');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSelectWord = (wordId: number) => {
-    const newSelected = new Set(selectedWordIds);
-    if (newSelected.has(wordId)) {
-      newSelected.delete(wordId);
-    } else {
-      newSelected.add(wordId);
-    }
-    setSelectedWordIds(newSelected);
-  };
-
-  const handleSelectAll = () => {
-    const currentPageWords = getCurrentPageWords();
-    if (isAllCurrentPageSelected()) {
-      // Unselect all on current page
-      const newSelected = new Set(selectedWordIds);
-      currentPageWords.forEach(word => newSelected.delete(word.id));
-      setSelectedWordIds(newSelected);
-    } else {
-      // Select all on current page
-      const newSelected = new Set(selectedWordIds);
-      currentPageWords.forEach(word => newSelected.add(word.id));
-      setSelectedWordIds(newSelected);
-    }
-  };
-
+// Diğer fonksiyonlar buraya gelecek (handleGenerateQuestions vs.)
   const handleGenerateQuestions = async () => {
     if (selectedWordIds.size === 0) {
       alert('Lütfen en az bir kelime seçin!');
@@ -126,7 +34,6 @@ const App: React.FC = () => {
       
       console.log('✅ Soru oluşturma tamamlandı:', result);
       
-      // Başarı mesajı
       const successMsg = `✅ Soru oluşturma tamamlandı!\n\n` +
         `📊 Başarılı: ${result.successful}\n` +
         `❌ Hatalı: ${result.failed}\n` +
@@ -134,7 +41,6 @@ const App: React.FC = () => {
       
       alert(successMsg);
       
-      // Refresh the data and clear selection
       await fetchWords();
       setSelectedWordIds(new Set());
       
@@ -160,7 +66,9 @@ const App: React.FC = () => {
     return sortDirection === 'asc' ? '⬆️' : '⬇️';
   };
 
-  const sortedWords = [...words].sort((a, b) => {
+  const filteredWords = getFilteredWords();
+  
+  const sortedWords = [...filteredWords].sort((a, b) => {
     const aValue = a[sortField];
     const bValue = b[sortField];
     
@@ -197,12 +105,12 @@ const App: React.FC = () => {
     setCurrentPage(page);
   };
 
-  // Sayfa boyutu değiştiğinde çağrılır
   const handlePageSizeChange = (newSize: number) => {
     setItemsPerPage(newSize);
-    setCurrentPage(1); // İlk sayfaya dön
+    setCurrentPage(1);
   };
 
+  // Loading ve Error states aynı...
   if (loading) {
     return (
       <div className="app">
@@ -232,6 +140,7 @@ const App: React.FC = () => {
 
   const currentPageWords = getCurrentPageWords();
   const totalPages = getTotalPages();
+  const uniqueSources = getUniqueSources();
 
   return (
     <div className="app">
@@ -248,7 +157,7 @@ const App: React.FC = () => {
           className={`tab ${activeTab === 'combinations' ? 'active' : ''}`}
           onClick={() => setActiveTab('combinations')}
         >
-          📋 Üçlü Kombinasyonlar ({totalWords})
+          📋 Kelime Kombinasyonları ({totalWords})
         </button>
         <button 
           className={`tab ${activeTab === 'words' ? 'active' : ''}`}
@@ -273,6 +182,73 @@ const App: React.FC = () => {
       <main className="main-content">
         {activeTab === 'combinations' && (
           <div className="tab-content">
+            {/* YENİ: Filtre Kontrolleri */}
+            <div className="filter-controls" style={{
+              marginBottom: '1rem', 
+              padding: '1rem', 
+              background: 'white', 
+              borderRadius: '8px', 
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              display: 'flex',
+              gap: '1rem',
+              alignItems: 'center',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                <span style={{fontWeight: '500', color: '#374151'}}>Zorluk:</span>
+                <select 
+                  value={difficultyFilter} 
+                  onChange={(e) => {
+                    setDifficultyFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    padding: '0.5rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    backgroundColor: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {difficultyLevels.map(level => (
+                    <option key={level} value={level}>
+                      {level === 'all' ? 'Tümü' : level.charAt(0).toUpperCase() + level.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                <span style={{fontWeight: '500', color: '#374151'}}>Kaynak:</span>
+                <select 
+                  value={sourceFilter} 
+                  onChange={(e) => {
+                    setSourceFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    padding: '0.5rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    backgroundColor: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {uniqueSources.map(source => (
+                    <option key={source} value={source}>
+                      {source === 'all' ? 'Tümü' : getSourceBadge(source)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{fontSize: '0.9rem', color: '#6b7280', marginLeft: 'auto'}}>
+                <strong>{filteredWords.length}</strong> kelime ({selectedWordIds.size} seçili)
+              </div>
+            </div>
+
             {/* Sayfa Kontrolleri */}
             <div className="pagination-controls" style={{
               marginBottom: '1rem', 
@@ -307,7 +283,7 @@ const App: React.FC = () => {
               </div>
               
               <div style={{fontSize: '0.9rem', color: '#6b7280'}}>
-                <strong>{itemsPerPage * (currentPage - 1) + 1} - {Math.min(itemsPerPage * currentPage, totalWords)}</strong> / {totalWords} kelime gösteriliyor
+                <strong>{itemsPerPage * (currentPage - 1) + 1} - {Math.min(itemsPerPage * currentPage, filteredWords.length)}</strong> / {filteredWords.length} kelime gösteriliyor
                 <span style={{marginLeft: '0.5rem', fontSize: '0.8rem', color: '#9ca3af'}}>
                   (Sayfa: {currentPage}/{getTotalPages()})
                 </span>
@@ -319,6 +295,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
+            {/* YENİ TABLO YAPISI */}
             <div className="table-container">
               <table className="words-table">
                 <thead>
@@ -334,11 +311,21 @@ const App: React.FC = () => {
                     <th onClick={() => handleSort('word')} className="sortable">
                       Kelime {getSortIcon('word')}
                     </th>
+                    <th onClick={() => handleSort('turkish_meaning')} className="sortable">
+                      Türkçe Anlam {getSortIcon('turkish_meaning')}
+                    </th>
                     <th onClick={() => handleSort('part_of_speech')} className="sortable">
                       Tür {getSortIcon('part_of_speech')}
                     </th>
-                    <th onClick={() => handleSort('definition')} className="sortable">
-                      Tanım {getSortIcon('definition')}
+                    <th onClick={() => handleSort('difficulty')} className="sortable">
+                      Zorluk {getSortIcon('difficulty')}
+                    </th>
+                    <th>Örnek Cümle</th>
+                    <th onClick={() => handleSort('source')} className="sortable">
+                      Kaynak {getSortIcon('source')}
+                    </th>
+                    <th onClick={() => handleSort('times_shown')} className="sortable">
+                      Gösterilme {getSortIcon('times_shown')}
                     </th>
                     <th onClick={() => handleSort('question_count')} className="sortable">
                       Soru Sayısı {getSortIcon('question_count')}
@@ -359,11 +346,45 @@ const App: React.FC = () => {
                       <td className="word-cell">
                         <strong>{word.word}</strong>
                       </td>
+                      <td className="definition-cell">
+                        {word.turkish_meaning}
+                      </td>
                       <td className="pos-cell">
                         <span className="pos-tag">{word.part_of_speech}</span>
                       </td>
-                      <td className="definition-cell">
-                        {word.definition}
+                      <td>
+                        <span 
+                          className="difficulty-badge"
+                          style={{
+                            background: getDifficultyColor(word.difficulty),
+                            color: 'white',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '9999px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                            textTransform: 'capitalize'
+                          }}
+                        >
+                          {word.difficulty}
+                        </span>
+                      </td>
+                      <td className="example-cell" style={{maxWidth: '300px', fontSize: '0.9rem', color: '#475569'}}>
+                        {word.english_example}
+                      </td>
+                      <td>
+                        <span style={{fontSize: '0.8rem', color: '#6b7280'}}>
+                          {getSourceBadge(word.source)}
+                        </span>
+                      </td>
+                      <td className="count-cell" style={{textAlign: 'center'}}>
+                        <div style={{fontSize: '0.9rem'}}>
+                          <div>{word.times_shown}</div>
+                          {word.times_shown > 0 && (
+                            <div style={{fontSize: '0.75rem', color: '#10b981'}}>
+                              {getSuccessRate(word.times_correct, word.times_shown)}% doğru
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="count-cell">
                         <span className={`count-badge ${word.question_count > 0 ? 'has-questions' : 'no-questions'}`}>
@@ -376,7 +397,7 @@ const App: React.FC = () => {
               </table>
             </div>
 
-            {/* Pagination Controls - Her zaman göster */}
+            {/* Pagination - Aynı kalacak ama filteredWords kullanacak */}
             <div className="pagination" style={{
               marginTop: '1rem', 
               textAlign: 'center',
@@ -463,13 +484,14 @@ const App: React.FC = () => {
               }}>
                 Sayfa {currentPage} / {totalPages} 
                 <span style={{marginLeft: '0.5rem', color: '#9ca3af'}}>
-                  (Toplam: {totalWords} kelime)
+                  (Toplam: {filteredWords.length} kelime)
                 </span>
               </span>
             </div>
           </div>
         )}
         
+        {/* Diğer tab'lar aynı kalacak */}
         {activeTab === 'words' && (
           <div className="tab-content">
             <h3>Sözcükler Sekmesi</h3>

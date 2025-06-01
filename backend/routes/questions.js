@@ -10,30 +10,36 @@ if (!process.env.GEMINI_API_KEY) {
 // Gemini AI client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Gemini'den soru oluştur
-async function generateQuestion(word, partOfSpeech, definition) {
+// Gemini'den soru oluştur - YENİ YAPIYA GÖRE
+async function generateQuestion(wordData) {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-Aşağıdaki İngilizce kelime için Türkçe quiz sorusu oluştur ve JSON formatında döndür:
+Aşağıdaki İngilizce kelime için quiz sorusu oluştur ve JSON formatında döndür:
 
-Kelime: ${word}
-Kelime türü: ${partOfSpeech}
-Tanım: ${definition}
+Kelime: ${wordData.word}
+Türkçe Anlamı: ${wordData.turkish_meaning}
+Kelime Türü: ${wordData.part_of_speech}
+Örnek Cümle: ${wordData.english_example}
+Zorluk: ${wordData.difficulty}
 
 Kurallar:
-1. TEK CÜMLELİK İngilizce paragraf yaz (kelimeyi doğru anlamda kullan)
-2. Soru: "Bu paragraftaki '${word}' kelimesinin anlamı nedir?"
-3. 1 doğru + 3 yanlış Türkçe anlam oluştur
-4. Sadece JSON döndür, başka metin yazma
+1. Verilen örnek cümleyi AYNEN kullan, değiştirme
+2. Soru: "Bu cümlede '${wordData.word}' kelimesinin anlamı nedir?"
+3. option_a = Doğru Türkçe anlam (verilen turkish_meaning kullan)
+4. option_b, option_c, option_d = Benzer ama yanlış 3 Türkçe anlam oluştur
+5. Yanlış anlamlar aynı kelime türünde olsun (${wordData.part_of_speech})
+6. Sadece JSON döndür, başka metin yazma
 
 JSON Format:
 {
-  "paragraph": "Tek cümlelik İngilizce paragraf burada",
-  "question": "Bu paragraftaki '${word}' kelimesinin anlamı nedir?",
-  "correct_answer": "Doğru Türkçe anlam",
-  "wrong_answers": ["Yanlış anlam 1", "Yanlış anlam 2", "Yanlış anlam 3"]
+  "paragraph": "${wordData.english_example}",
+  "question": "Bu cümlede '${wordData.word}' kelimesinin anlamı nedir?",
+  "option_a": "${wordData.turkish_meaning}",
+  "option_b": "Yanlış anlam 1",
+  "option_c": "Yanlış anlam 2", 
+  "option_d": "Yanlış anlam 3"
 }`;
 
     const result = await model.generateContent(prompt);
@@ -41,12 +47,11 @@ JSON Format:
     return response.text();
 
   } catch (error) {
-    console.error(`Gemini API hatası (${word}):`, error.message);
+    console.error(`Gemini API hatası (${wordData.word}):`, error.message);
     throw new Error(`Gemini API hatası: ${error.message}`);
   }
 }
 
-// Gemini response'unu parse et
 // Gemini response'unu parse et
 function parseGeminiResponse(response) {
   try {
@@ -62,22 +67,19 @@ function parseGeminiResponse(response) {
     const jsonData = JSON.parse(cleanJson);
     
     // Validation - gerekli alanlar var mı?
-    if (!jsonData.paragraph || !jsonData.question || !jsonData.correct_answer || !jsonData.wrong_answers) {
+    if (!jsonData.paragraph || !jsonData.question || !jsonData.option_a || 
+        !jsonData.option_b || !jsonData.option_c || !jsonData.option_d) {
       throw new Error('JSON response eksik alanlar içeriyor');
     }
     
-    if (!Array.isArray(jsonData.wrong_answers) || jsonData.wrong_answers.length !== 3) {
-      throw new Error('wrong_answers 3 elemanlı array olmalı');
-    }
-    
-    // Yeni formata dönüştür
+    // Formatı döndür
     return {
       paragraph: jsonData.paragraph,
       question: jsonData.question,
-      option_a: jsonData.correct_answer,      // Doğru cevap hep A
-      option_b: jsonData.wrong_answers[0],    // 1. yanlış cevap
-      option_c: jsonData.wrong_answers[1],    // 2. yanlış cevap  
-      option_d: jsonData.wrong_answers[2]     // 3. yanlış cevap
+      option_a: jsonData.option_a,      // Doğru cevap
+      option_b: jsonData.option_b,      // Yanlış cevap 1
+      option_c: jsonData.option_c,      // Yanlış cevap 2  
+      option_d: jsonData.option_d       // Yanlış cevap 3
     };
     
   } catch (error) {
@@ -109,10 +111,17 @@ router.post('/generate', async (req, res) => {
 
     console.log(`🚀 ${wordIds.length} kelime için soru oluşturma başladı...`);
 
-    // Kelime bilgilerini al
+    // Yeni tablo yapısına göre kelime bilgilerini al
     const { data: words, error: wordsError } = await req.supabase
       .from('words')
-      .select('id, word, part_of_speech, definition')
+      .select(`
+        id, 
+        word, 
+        turkish_meaning, 
+        part_of_speech, 
+        english_example,
+        difficulty
+      `)
       .in('id', wordIds)
       .eq('is_active', true);
 
@@ -133,50 +142,49 @@ router.post('/generate', async (req, res) => {
 
     // Her kelime için soru oluştur
     for (let i = 0; i < words.length; i++) {
-      const word = words[i];
+      const wordData = words[i];
       
       try {
-        console.log(`📝 [${i+1}/${words.length}] "${word.word}" için soru oluşturuluyor...`);
+        console.log(`📝 [${i+1}/${words.length}] "${wordData.word}" için soru oluşturuluyor...`);
         
         // Gemini'den soru oluştur
-        const geminiResponse = await generateQuestion(
-          word.word, 
-          word.part_of_speech, 
-          word.definition
-        );
+        const geminiResponse = await generateQuestion(wordData);
         
         // Response'u parse et
         const parsedQuestion = parseGeminiResponse(geminiResponse);
         
-        /// Soruyu veritabanına kaydet
+        // Soruyu veritabanına kaydet - YENİ YAPIYA GÖRE
         const { data: question, error: insertError } = await req.supabase
           .from('questions')
           .insert({
-            word_id: word.id,
+            word_id: wordData.id,
             paragraph: parsedQuestion.paragraph,
             question_text: parsedQuestion.question,
             option_a: parsedQuestion.option_a,  // Doğru cevap
             option_b: parsedQuestion.option_b,  // Yanlış cevap 1
             option_c: parsedQuestion.option_c,  // Yanlış cevap 2
             option_d: parsedQuestion.option_d,  // Yanlış cevap 3
+            difficulty: wordData.difficulty,
+            is_active: true,
             created_at: new Date().toISOString()
           })
           .select()
           .single();
 
         if (insertError) {
-          console.error(`DB insert hatası (${word.word}):`, insertError);
+          console.error(`DB insert hatası (${wordData.word}):`, insertError);
           throw new Error(`Veritabanı hatası: ${insertError.message}`);
         }
 
         results.push({
-          word_id: word.id,
-          word: word.word,
+          word_id: wordData.id,
+          word: wordData.word,
           question_id: question.id,
+          difficulty: wordData.difficulty,
           status: 'success'
         });
 
-        console.log(`✅ [${i+1}/${words.length}] "${word.word}" için soru başarıyla oluşturuldu`);
+        console.log(`✅ [${i+1}/${words.length}] "${wordData.word}" için soru başarıyla oluşturuldu`);
 
         // Rate limiting için kısa bekleme
         if (i < words.length - 1) {
@@ -184,10 +192,10 @@ router.post('/generate', async (req, res) => {
         }
 
       } catch (error) {
-        console.error(`❌ "${word.word}" için soru oluşturulamadı:`, error.message);
+        console.error(`❌ "${wordData.word}" için soru oluşturulamadı:`, error.message);
         errors.push({
-          word_id: word.id,
-          word: word.word,
+          word_id: wordData.id,
+          word: wordData.word,
           error: error.message,
           status: 'failed'
         });
@@ -231,9 +239,10 @@ router.get('/word/:wordId', async (req, res) => {
       .from('questions')
       .select(`
         *,
-        words(word, part_of_speech, definition)
+        words(word, turkish_meaning, part_of_speech, english_example, difficulty)
       `)
       .eq('word_id', wordId)
+      .eq('is_active', true)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -267,8 +276,9 @@ router.get('/', async (req, res) => {
       .from('questions')
       .select(`
         *,
-        words(word, part_of_speech, definition)
+        words(word, turkish_meaning, part_of_speech, english_example, difficulty)
       `, { count: 'exact' })
+      .eq('is_active', true)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
