@@ -1,4 +1,161 @@
-// Diğer fonksiyonlar buraya gelecek (handleGenerateQuestions vs.)
+import React, { useState, useEffect } from 'react';
+import './App.css';
+import config from './config';
+
+// GÜNCELLENMIŞ TYPES - YENİ TABLO YAPISINA GÖRE
+interface Word {
+  id: number;
+  word: string;
+  turkish_meaning: string;          // Eskiden definition vardı
+  part_of_speech: string;
+  english_example: string;          // YENİ: Örnek cümle
+  difficulty: string;               // YENİ: Zorluk seviyesi
+  source: string;                   // YENİ: Kaynak bilgisi
+  times_shown: number;              // YENİ: Kaç kez gösterildi
+  times_correct: number;            // YENİ: Kaç kez doğru cevaplanmış
+  is_active: boolean;               // YENİ: Aktif/pasif durumu
+  created_at: string;               // YENİ: Oluşturulma zamanı
+  updated_at: string;               // YENİ: Güncellenme zamanı
+  question_count: number;           // Soru sayısı (hesaplanmış)
+}
+
+interface ApiResponse {
+  words: Word[];
+  total: number;
+  message?: string;
+}
+
+// Zorluk seviyesi renkleri için helper
+const getDifficultyColor = (difficulty: string): string => {
+  switch (difficulty.toLowerCase()) {
+    case 'beginner':
+      return '#10b981'; // Yeşil
+    case 'intermediate':
+      return '#f59e0b'; // Sarı
+    case 'advanced':
+      return '#ef4444'; // Kırmızı
+    case 'expert':
+      return '#8b5cf6'; // Mor
+    default:
+      return '#6b7280'; // Gri
+  }
+};
+
+// Kaynak türü badge'i için helper
+const getSourceBadge = (source: string): string => {
+  switch (source.toLowerCase()) {
+    case 'gemini-api':
+      return '🤖 Gemini';
+    case 'manual':
+      return '✏️ Manuel';
+    case 'import':
+      return '📥 İmport';
+    default:
+      return source;
+  }
+};
+
+// Başarı oranı hesaplama helper'ı
+const getSuccessRate = (correct: number, shown: number): number => {
+  if (shown === 0) return 0;
+  return Math.round((correct / shown) * 100);
+};
+
+// Tab types
+type TabType = 'combinations' | 'words' | 'pos' | 'definitions';
+
+const App: React.FC = () => {
+  const [words, setWords] = useState<Word[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('combinations');
+  const [selectedWordIds, setSelectedWordIds] = useState<Set<number>>(new Set());
+  const [sortField, setSortField] = useState<keyof Word>('word');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalWords, setTotalWords] = useState(0);
+
+  // Filtering states - YENİ
+  const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+
+  // Sayfa boyutu seçenekleri
+  const pageSizeOptions = [10, 20, 30, 40, 50];
+
+  // Zorluk seviyeleri
+  const difficultyLevels = ['all', 'beginner', 'intermediate', 'advanced', 'expert'];
+
+  // Fetch words from backend
+  useEffect(() => {
+    fetchWords();
+  }, []);
+
+  const fetchWords = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`${config.API_URL}${config.ENDPOINTS.WORDS}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data: ApiResponse = await response.json();
+      setWords(data.words);
+      setTotalWords(data.total);
+      console.log(`✅ ${data.words.length} kelime yüklendi`);
+      
+    } catch (err) {
+      console.error('❌ Fetch words hatası:', err);
+      setError(err instanceof Error ? err.message : 'Veri yüklenirken hata oluştu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filtrelenmiş kelimeleri döndür
+  const getFilteredWords = (): Word[] => {
+    return words.filter(word => {
+      const difficultyMatch = difficultyFilter === 'all' || word.difficulty === difficultyFilter;
+      const sourceMatch = sourceFilter === 'all' || word.source === sourceFilter;
+      return difficultyMatch && sourceMatch;
+    });
+  };
+
+  // Benzersiz kaynak türlerini al
+  const getUniqueSources = (): string[] => {
+    const sources = [...new Set(words.map(word => word.source))];
+    return ['all', ...sources];
+  };
+
+  const handleSelectWord = (wordId: number) => {
+    const newSelected = new Set(selectedWordIds);
+    if (newSelected.has(wordId)) {
+      newSelected.delete(wordId);
+    } else {
+      newSelected.add(wordId);
+    }
+    setSelectedWordIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    const currentPageWords = getCurrentPageWords();
+    if (isAllCurrentPageSelected()) {
+      const newSelected = new Set(selectedWordIds);
+      currentPageWords.forEach(word => newSelected.delete(word.id));
+      setSelectedWordIds(newSelected);
+    } else {
+      const newSelected = new Set(selectedWordIds);
+      currentPageWords.forEach(word => newSelected.add(word.id));
+      setSelectedWordIds(newSelected);
+    }
+  };
+
   const handleGenerateQuestions = async () => {
     if (selectedWordIds.size === 0) {
       alert('Lütfen en az bir kelime seçin!');
@@ -110,7 +267,6 @@
     setCurrentPage(1);
   };
 
-  // Loading ve Error states aynı...
   if (loading) {
     return (
       <div className="app">
@@ -397,7 +553,7 @@
               </table>
             </div>
 
-            {/* Pagination - Aynı kalacak ama filteredWords kullanacak */}
+            {/* Pagination */}
             <div className="pagination" style={{
               marginTop: '1rem', 
               textAlign: 'center',
@@ -491,7 +647,6 @@
           </div>
         )}
         
-        {/* Diğer tab'lar aynı kalacak */}
         {activeTab === 'words' && (
           <div className="tab-content">
             <h3>Sözcükler Sekmesi</h3>
