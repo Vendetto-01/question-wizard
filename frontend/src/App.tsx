@@ -127,9 +127,9 @@ const App: React.FC = () => {
     });
   };
 
-  // Benzersiz kaynak türlerini al
+  // Benzersiz kaynak türlerini al - DÜZELTME
   const getUniqueSources = (): string[] => {
-    const sources = [...new Set(words.map(word => word.source))];
+    const sources = Array.from(new Set(words.map(word => word.source)));
     return ['all', ...sources];
   };
 
