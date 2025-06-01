@@ -24,8 +24,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Routes
-app.use('/api/health', require('./routes/health')); // YENİ: Health check route
+// Health check route (standart convention)
+app.use('/health', require('./routes/health')); // YENİ: Health check route
+
+// API Routes
 app.use('/api/words', require('./routes/words'));
 app.use('/api/questions', require('./routes/questions'));
 app.use('/api/test', require('./routes/test-gemini'));
@@ -37,7 +39,7 @@ app.get('/', (req, res) => {
     status: 'running',
     timestamp: new Date().toISOString(),
     endpoints: {
-      health: '/api/health',
+      health: '/health',
       words: '/api/words',
       questions: '/api/questions',
       test: '/api/test'
@@ -47,5 +49,5 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Question Generator Server running on port ${PORT}`);
-  console.log(`📊 Health check available at: /api/health`);
+  console.log(`📊 Health check available at: /health`);
 });

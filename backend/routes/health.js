@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-// GET /api/health - Health check endpoint for monitoring
+// GET /health - Health check endpoint for monitoring (standart convention)
 router.get('/', (req, res) => {
   const timestamp = new Date().toISOString();
   const uptime = process.uptime();
@@ -16,7 +16,7 @@ router.get('/', (req, res) => {
   });
 });
 
-// GET /api/health/ping - Minimal ping endpoint
+// GET /health/ping - Minimal ping endpoint (UptimeRobot için)
 router.get('/ping', (req, res) => {
   res.status(200).send('pong');
 });
