@@ -24,8 +24,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check route (standart convention)
-app.use('/health', require('./routes/health')); // YENİ: Health check route
+// Health check endpoints (simple & direct)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    message: 'Question Generator Backend is running',
+    timestamp: new Date().toISOString(),
+    uptime: `${Math.floor(process.uptime())} seconds`
+  });
+});
+
+app.get('/health/ping', (req, res) => {
+  res.status(200).send('pong');
+});
 
 // API Routes
 app.use('/api/words', require('./routes/words'));
@@ -40,6 +51,7 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString(),
     endpoints: {
       health: '/health',
+      ping: '/health/ping',
       words: '/api/words',
       questions: '/api/questions',
       test: '/api/test'
@@ -50,4 +62,5 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Question Generator Server running on port ${PORT}`);
   console.log(`📊 Health check available at: /health`);
+  console.log(`🏓 Ping endpoint available at: /health/ping`);
 });
