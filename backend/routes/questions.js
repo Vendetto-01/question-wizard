@@ -10,37 +10,45 @@ if (!process.env.GEMINI_API_KEY) {
 // Gemini AI client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Gemini'den soru oluştur - YENİ YAPIYA GÖRE
+// Gemini'den soru oluştur - YENİ BASIT VE TEMİZ YAPIYA GÖRE
 async function generateQuestion(wordData) {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-Aşağıdaki İngilizce kelime için quiz sorusu oluştur ve JSON formatında döndür:
+Aşağıdaki İngilizce kelime için çoktan seçmeli quiz sorusu oluştur:
 
 Kelime: ${wordData.word}
 Türkçe Anlamı: ${wordData.turkish_meaning}
 Kelime Türü: ${wordData.part_of_speech}
-Örnek Cümle: ${wordData.english_example}
-Zorluk: ${wordData.difficulty}
+Anlam Açıklaması: ${wordData.meaning_description}
+İngilizce Örnek Cümle: ${wordData.english_example}
+Türkçe Örnek Cümle: ${wordData.turkish_sentence}
+Zorluk Seviyesi: ${wordData.final_difficulty}
 
-Kurallar:
-1. Verilen örnek cümleyi AYNEN kullan, değiştirme
+Görev:
+1. Verilen İngilizce örnek cümleyi AYNEN kullan
 2. Soru: "Bu cümlede '${wordData.word}' kelimesinin anlamı nedir?"
-3. option_a = Doğru Türkçe anlam (verilen turkish_meaning kullan)
-4. option_b, option_c, option_d = Benzer ama yanlış 3 Türkçe anlam oluştur
-5. Yanlış anlamlar aynı kelime türünde olsun (${wordData.part_of_speech})
-6. Sadece JSON döndür, başka metin yazma
+3. 4 şık oluştur: 1 doğru, 3 yanlış
+4. Doğru şık verilen Türkçe anlamı olacak
+5. Yanlış şıkları sen belirle (benzer olmaları gerekmiyor)
 
-JSON Format:
+SADECE JSON döndür, başka metin yazma:
+
 {
   "paragraph": "${wordData.english_example}",
   "question": "Bu cümlede '${wordData.word}' kelimesinin anlamı nedir?",
-  "option_a": "${wordData.turkish_meaning}",
-  "option_b": "Yanlış anlam 1",
-  "option_c": "Yanlış anlam 2", 
-  "option_d": "Yanlış anlam 3"
-}`;
+  "options": {
+    "A": "Şık A metni",
+    "B": "Şık B metni", 
+    "C": "Şık C metni",
+    "D": "Şık D metni"
+  },
+  "correct_answer": "A",
+  "explanation": "Kısa açıklama"
+}
+
+NOT: correct_answer kesinlikle A, B, C veya D olmalı ve doğru şıkkı göstermeli.`;
 
     const result = await model.generateContent(prompt);
     const response = result.response;
@@ -52,7 +60,7 @@ JSON Format:
   }
 }
 
-// Gemini response'unu parse et
+// Gemini response'unu parse et - YENİ FORMAT
 function parseGeminiResponse(response) {
   try {
     // JSON'u temizle (bazen başında/sonunda extra metin olabiliyor)
@@ -67,19 +75,32 @@ function parseGeminiResponse(response) {
     const jsonData = JSON.parse(cleanJson);
     
     // Validation - gerekli alanlar var mı?
-    if (!jsonData.paragraph || !jsonData.question || !jsonData.option_a || 
-        !jsonData.option_b || !jsonData.option_c || !jsonData.option_d) {
+    if (!jsonData.paragraph || !jsonData.question || !jsonData.options || 
+        !jsonData.correct_answer || !jsonData.explanation) {
       throw new Error('JSON response eksik alanlar içeriyor');
     }
+
+    // Options kontrolü
+    if (!jsonData.options.A || !jsonData.options.B || 
+        !jsonData.options.C || !jsonData.options.D) {
+      throw new Error('Options A, B, C, D eksik');
+    }
+
+    // Correct answer kontrolü
+    if (!['A', 'B', 'C', 'D'].includes(jsonData.correct_answer)) {
+      throw new Error('correct_answer A, B, C veya D olmalı');
+    }
     
-    // Formatı döndür
+    // Yeni formatı döndür
     return {
       paragraph: jsonData.paragraph,
       question: jsonData.question,
-      option_a: jsonData.option_a,      // Doğru cevap
-      option_b: jsonData.option_b,      // Yanlış cevap 1
-      option_c: jsonData.option_c,      // Yanlış cevap 2  
-      option_d: jsonData.option_d       // Yanlış cevap 3
+      option_a: jsonData.options.A,
+      option_b: jsonData.options.B,
+      option_c: jsonData.options.C,
+      option_d: jsonData.options.D,
+      correct_answer: jsonData.correct_answer, // A, B, C veya D
+      explanation: jsonData.explanation
     };
     
   } catch (error) {
@@ -117,10 +138,13 @@ router.post('/generate', async (req, res) => {
       .select(`
         id, 
         word, 
-        turkish_meaning, 
-        part_of_speech, 
+        meaning_id,
+        part_of_speech,
+        meaning_description,
         english_example,
-        difficulty
+        turkish_sentence,
+        turkish_meaning,
+        final_difficulty
       `)
       .in('id', wordIds)
       .eq('is_active', true);
@@ -160,11 +184,13 @@ router.post('/generate', async (req, res) => {
             word_id: wordData.id,
             paragraph: parsedQuestion.paragraph,
             question_text: parsedQuestion.question,
-            option_a: parsedQuestion.option_a,  // Doğru cevap
-            option_b: parsedQuestion.option_b,  // Yanlış cevap 1
-            option_c: parsedQuestion.option_c,  // Yanlış cevap 2
-            option_d: parsedQuestion.option_d,  // Yanlış cevap 3
-            difficulty: wordData.difficulty,
+            option_a: parsedQuestion.option_a,
+            option_b: parsedQuestion.option_b,
+            option_c: parsedQuestion.option_c,
+            option_d: parsedQuestion.option_d,
+            correct_answer: parsedQuestion.correct_answer, // A, B, C veya D
+            explanation: parsedQuestion.explanation,
+            difficulty: wordData.final_difficulty,
             is_active: true,
             created_at: new Date().toISOString()
           })
@@ -180,11 +206,12 @@ router.post('/generate', async (req, res) => {
           word_id: wordData.id,
           word: wordData.word,
           question_id: question.id,
-          difficulty: wordData.difficulty,
+          difficulty: wordData.final_difficulty,
+          correct_answer: parsedQuestion.correct_answer,
           status: 'success'
         });
 
-        console.log(`✅ [${i+1}/${words.length}] "${wordData.word}" için soru başarıyla oluşturuldu`);
+        console.log(`✅ [${i+1}/${words.length}] "${wordData.word}" için soru başarıyla oluşturuldu (Doğru: ${parsedQuestion.correct_answer})`);
 
         // Rate limiting için kısa bekleme
         if (i < words.length - 1) {
@@ -239,7 +266,7 @@ router.get('/word/:wordId', async (req, res) => {
       .from('questions')
       .select(`
         *,
-        words(word, turkish_meaning, part_of_speech, english_example, difficulty)
+        words(word, turkish_meaning, part_of_speech, meaning_description, english_example, final_difficulty)
       `)
       .eq('word_id', wordId)
       .eq('is_active', true)
@@ -276,7 +303,7 @@ router.get('/', async (req, res) => {
       .from('questions')
       .select(`
         *,
-        words(word, turkish_meaning, part_of_speech, english_example, difficulty)
+        words(word, turkish_meaning, part_of_speech, meaning_description, english_example, final_difficulty)
       `, { count: 'exact' })
       .eq('is_active', true)
       .order('created_at', { ascending: false })

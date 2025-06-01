@@ -6,17 +6,23 @@ import config from './config';
 interface Word {
   id: number;
   word: string;
-  turkish_meaning: string;          // Eskiden definition vardı
+  meaning_id: number;                // YENİ: Anlam ID'si
   part_of_speech: string;
-  english_example: string;          // YENİ: Örnek cümle
-  difficulty: string;               // YENİ: Zorluk seviyesi
-  source: string;                   // YENİ: Kaynak bilgisi
-  times_shown: number;              // YENİ: Kaç kez gösterildi
-  times_correct: number;            // YENİ: Kaç kez doğru cevaplanmış
-  is_active: boolean;               // YENİ: Aktif/pasif durumu
-  created_at: string;               // YENİ: Oluşturulma zamanı
-  updated_at: string;               // YENİ: Güncellenme zamanı
-  question_count: number;           // Soru sayısı (hesaplanmış)
+  meaning_description: string;       // YENİ: Anlam açıklaması
+  english_example: string;
+  turkish_sentence: string;          // YENİ: Türkçe örnek cümle
+  turkish_meaning: string;
+  initial_difficulty: string;        // YENİ: İlk zorluk
+  final_difficulty: string;          // YENİ: Final zorluk  
+  difficulty_reasoning: string;      // YENİ: Zorluk gerekçesi
+  analysis_method: string;           // YENİ: Analiz metodu
+  source: string;
+  times_shown: number;
+  times_correct: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  question_count: number;            // Soru sayısı (hesaplanmış)
 }
 
 interface ApiResponse {
@@ -44,14 +50,30 @@ const getDifficultyColor = (difficulty: string): string => {
 // Kaynak türü badge'i için helper
 const getSourceBadge = (source: string): string => {
   switch (source.toLowerCase()) {
-    case 'gemini-api':
-      return '🤖 Gemini';
+    case 'gemini-2.0-flash-001':
+      return '🤖 Gemini 2.0';
+    case 'gemini-1.5-flash':
+      return '🤖 Gemini 1.5';
     case 'manual':
       return '✏️ Manuel';
     case 'import':
       return '📥 İmport';
     default:
       return source;
+  }
+};
+
+// Analiz metodu badge'i için helper
+const getAnalysisMethodBadge = (method: string): string => {
+  switch (method.toLowerCase()) {
+    case 'step-by-step':
+      return '🔍 Adım Adım';
+    case 'contextual':
+      return '📄 Bağlamsal';
+    case 'semantic':
+      return '🧠 Anlamsal';
+    default:
+      return method;
   }
 };
 
@@ -82,6 +104,7 @@ const App: React.FC = () => {
   // Filtering states - YENİ
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [methodFilter, setMethodFilter] = useState<string>('all');
 
   // Sayfa boyutu seçenekleri
   const pageSizeOptions = [10, 20, 30, 40, 50];
@@ -121,16 +144,23 @@ const App: React.FC = () => {
   // Filtrelenmiş kelimeleri döndür
   const getFilteredWords = (): Word[] => {
     return words.filter(word => {
-      const difficultyMatch = difficultyFilter === 'all' || word.difficulty === difficultyFilter;
+      const difficultyMatch = difficultyFilter === 'all' || word.final_difficulty === difficultyFilter;
       const sourceMatch = sourceFilter === 'all' || word.source === sourceFilter;
-      return difficultyMatch && sourceMatch;
+      const methodMatch = methodFilter === 'all' || word.analysis_method === methodFilter;
+      return difficultyMatch && sourceMatch && methodMatch;
     });
   };
 
-  // Benzersiz kaynak türlerini al - DÜZELTME
+  // Benzersiz kaynak türlerini al
   const getUniqueSources = (): string[] => {
     const sources = Array.from(new Set(words.map(word => word.source)));
     return ['all', ...sources];
+  };
+
+  // Benzersiz analiz metodlarını al
+  const getUniqueMethods = (): string[] => {
+    const methods = Array.from(new Set(words.map(word => word.analysis_method)));
+    return ['all', ...methods];
   };
 
   const handleSelectWord = (wordId: number) => {
@@ -164,7 +194,8 @@ const App: React.FC = () => {
 
     const confirmed = window.confirm(
       `${selectedWordIds.size} kelime için sorular oluşturulsun mu?\n\n` +
-      `⚠️ Bu işlem ${selectedWordIds.size} dakika kadar sürebilir.`
+      `⚠️ Bu işlem ${selectedWordIds.size} dakika kadar sürebilir.\n\n` +
+      `🤖 Gemini AI ile yeni format soruları oluşturulacak.`
     );
     if (!confirmed) return;
 
@@ -194,7 +225,8 @@ const App: React.FC = () => {
       const successMsg = `✅ Soru oluşturma tamamlandı!\n\n` +
         `📊 Başarılı: ${result.successful}\n` +
         `❌ Hatalı: ${result.failed}\n` +
-        `📈 Başarı oranı: ${result.success_rate}`;
+        `📈 Başarı oranı: ${result.success_rate}\n\n` +
+        `🎯 Doğru şıklar otomatik olarak belirlendi`;
       
       alert(successMsg);
       
@@ -297,12 +329,13 @@ const App: React.FC = () => {
   const currentPageWords = getCurrentPageWords();
   const totalPages = getTotalPages();
   const uniqueSources = getUniqueSources();
+  const uniqueMethods = getUniqueMethods();
 
   return (
     <div className="app">
       <header className="header">
         <h1>🧠 Question Generator</h1>
-        <p>Gemini AI ile İngilizce kelimeler için quiz soruları oluşturun</p>
+        <p>Gemini AI ile İngilizce kelimeler için quiz soruları oluşturun (Yeni Format)</p>
         {process.env.NODE_ENV === 'development' && (
           <small style={{opacity: 0.7}}>Backend: {config.API_URL}</small>
         )}
@@ -351,7 +384,7 @@ const App: React.FC = () => {
               flexWrap: 'wrap'
             }}>
               <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                <span style={{fontWeight: '500', color: '#374151'}}>Zorluk:</span>
+                <span style={{fontWeight: '500', color: '#374151'}}>Final Zorluk:</span>
                 <select 
                   value={difficultyFilter} 
                   onChange={(e) => {
@@ -395,6 +428,31 @@ const App: React.FC = () => {
                   {uniqueSources.map(source => (
                     <option key={source} value={source}>
                       {source === 'all' ? 'Tümü' : getSourceBadge(source)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                <span style={{fontWeight: '500', color: '#374151'}}>Analiz:</span>
+                <select 
+                  value={methodFilter} 
+                  onChange={(e) => {
+                    setMethodFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    padding: '0.5rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    backgroundColor: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {uniqueMethods.map(method => (
+                    <option key={method} value={method}>
+                      {method === 'all' ? 'Tümü' : getAnalysisMethodBadge(method)}
                     </option>
                   ))}
                 </select>
@@ -473,12 +531,20 @@ const App: React.FC = () => {
                     <th onClick={() => handleSort('part_of_speech')} className="sortable">
                       Tür {getSortIcon('part_of_speech')}
                     </th>
-                    <th onClick={() => handleSort('difficulty')} className="sortable">
-                      Zorluk {getSortIcon('difficulty')}
+                    <th>Anlam Açıklaması</th>
+                    <th onClick={() => handleSort('initial_difficulty')} className="sortable">
+                      İlk Zorluk {getSortIcon('initial_difficulty')}
                     </th>
-                    <th>Örnek Cümle</th>
+                    <th onClick={() => handleSort('final_difficulty')} className="sortable">
+                      Final Zorluk {getSortIcon('final_difficulty')}
+                    </th>
+                    <th>İngilizce Örnek</th>
+                    <th>Türkçe Örnek</th>
                     <th onClick={() => handleSort('source')} className="sortable">
                       Kaynak {getSortIcon('source')}
+                    </th>
+                    <th onClick={() => handleSort('analysis_method')} className="sortable">
+                      Analiz {getSortIcon('analysis_method')}
                     </th>
                     <th onClick={() => handleSort('times_shown')} className="sortable">
                       Gösterilme {getSortIcon('times_shown')}
@@ -501,6 +567,9 @@ const App: React.FC = () => {
                       </td>
                       <td className="word-cell">
                         <strong>{word.word}</strong>
+                        <div style={{fontSize: '0.8rem', color: '#9ca3af'}}>
+                          ID: {word.meaning_id}
+                        </div>
                       </td>
                       <td className="definition-cell">
                         {word.turkish_meaning}
@@ -508,28 +577,55 @@ const App: React.FC = () => {
                       <td className="pos-cell">
                         <span className="pos-tag">{word.part_of_speech}</span>
                       </td>
+                      <td className="description-cell" style={{maxWidth: '200px', fontSize: '0.9rem', color: '#475569'}}>
+                        {word.meaning_description}
+                      </td>
                       <td>
                         <span 
                           className="difficulty-badge"
                           style={{
-                            background: getDifficultyColor(word.difficulty),
+                            background: getDifficultyColor(word.initial_difficulty),
                             color: 'white',
-                            padding: '0.25rem 0.75rem',
+                            padding: '0.25rem 0.5rem',
                             borderRadius: '9999px',
-                            fontSize: '0.75rem',
+                            fontSize: '0.7rem',
                             fontWeight: '600',
                             textTransform: 'capitalize'
                           }}
                         >
-                          {word.difficulty}
+                          {word.initial_difficulty}
                         </span>
                       </td>
-                      <td className="example-cell" style={{maxWidth: '300px', fontSize: '0.9rem', color: '#475569'}}>
+                      <td>
+                        <span 
+                          className="difficulty-badge"
+                          style={{
+                            background: getDifficultyColor(word.final_difficulty),
+                            color: 'white',
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '9999px',
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            textTransform: 'capitalize'
+                          }}
+                        >
+                          {word.final_difficulty}
+                        </span>
+                      </td>
+                      <td className="example-cell" style={{maxWidth: '250px', fontSize: '0.85rem', color: '#475569'}}>
                         {word.english_example}
+                      </td>
+                      <td className="example-cell" style={{maxWidth: '250px', fontSize: '0.85rem', color: '#475569'}}>
+                        {word.turkish_sentence}
                       </td>
                       <td>
                         <span style={{fontSize: '0.8rem', color: '#6b7280'}}>
                           {getSourceBadge(word.source)}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{fontSize: '0.8rem', color: '#6b7280'}}>
+                          {getAnalysisMethodBadge(word.analysis_method)}
                         </span>
                       </td>
                       <td className="count-cell" style={{textAlign: 'center'}}>
@@ -680,7 +776,7 @@ const App: React.FC = () => {
             </span>
             {isGenerating && (
               <div style={{color: '#f59e0b', fontWeight: 'bold'}}>
-                🔄 Sorular oluşturuluyor...
+                🔄 Sorular oluşturuluyor... (Doğru şıklar otomatik belirleniyor)
               </div>
             )}
           </div>
@@ -692,7 +788,7 @@ const App: React.FC = () => {
           >
             {isGenerating 
               ? '⏳ Oluşturuluyor...' 
-              : `🤖 Seçilenleri Gemini'ye Gönder (${selectedWordIds.size})`
+              : `🤖 Yeni Format Sorular Oluştur (${selectedWordIds.size})`
             }
           </button>
         </div>
