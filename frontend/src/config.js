@@ -7,7 +7,8 @@ const config = {
   ENDPOINTS: {
     WORDS: '/api/words',
     QUESTIONS: '/api/questions',
-    GENERATE_QUESTIONS: '/api/questions/generate'
+    GENERATE_QUESTIONS: '/api/questions/generate',
+    DATABASE_INFO: '/api/database-info'
   }
 };
 
