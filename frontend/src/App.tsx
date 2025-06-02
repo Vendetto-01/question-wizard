@@ -83,14 +83,10 @@ const getSuccessRate = (correct: number, shown: number): number => {
   return Math.round((correct / shown) * 100);
 };
 
-// Tab types
-type TabType = 'combinations' | 'words' | 'pos' | 'definitions';
-
 const App: React.FC = () => {
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('combinations');
   const [selectedWordIds, setSelectedWordIds] = useState<Set<number>>(new Set());
   const [sortField, setSortField] = useState<keyof Word>('word');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -99,7 +95,6 @@ const App: React.FC = () => {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalWords, setTotalWords] = useState(0);
 
   // Filtering states - YENİ
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
@@ -130,8 +125,7 @@ const App: React.FC = () => {
       
       const data: ApiResponse = await response.json();
       setWords(data.words);
-      setTotalWords(data.total);
-      console.log(`✅ ${data.words.length} kelime yüklendi`);
+      console.log(`✅ ${data.words.length} kelime kombinasyonu yüklendi`);
       
     } catch (err) {
       console.error('❌ Fetch words hatası:', err);
@@ -188,12 +182,12 @@ const App: React.FC = () => {
 
   const handleGenerateQuestions = async () => {
     if (selectedWordIds.size === 0) {
-      alert('Lütfen en az bir kelime seçin!');
+      alert('Lütfen en az bir kelime kombinasyonu seçin!');
       return;
     }
 
     const confirmed = window.confirm(
-      `${selectedWordIds.size} kelime için sorular oluşturulsun mu?\n\n` +
+      `${selectedWordIds.size} kelime kombinasyonu için sorular oluşturulsun mu?\n\n` +
       `⚠️ Bu işlem ${selectedWordIds.size} dakika kadar sürebilir.\n\n` +
       `🤖 Gemini AI ile yeni format soruları oluşturulacak.`
     );
@@ -201,7 +195,7 @@ const App: React.FC = () => {
 
     try {
       setIsGenerating(true);
-      console.log(`🚀 ${selectedWordIds.size} kelime için soru oluşturma başladı...`);
+      console.log(`🚀 ${selectedWordIds.size} kelime kombinasyonu için soru oluşturma başladı...`);
 
       const response = await fetch(`${config.API_URL}${config.ENDPOINTS.GENERATE_QUESTIONS}`, {
         method: 'POST',
@@ -304,7 +298,7 @@ const App: React.FC = () => {
       <div className="app">
         <div className="loading">
           <div>🔄</div>
-          <p>Kelimeler yükleniyor...</p>
+          <p>Kelime kombinasyonları yükleniyor...</p>
           <small>Backend: {config.API_URL}</small>
         </div>
       </div>
@@ -331,470 +325,391 @@ const App: React.FC = () => {
   const uniqueSources = getUniqueSources();
   const uniqueMethods = getUniqueMethods();
 
+  // ✅ DOĞRU KOMBINASYON SAYISI - Filtrelenmiş toplam
+  const totalCombinations = words.length;
+  const filteredCombinations = filteredWords.length;
+
   return (
     <div className="app">
       <header className="header">
         <h1>🧠 Question Generator</h1>
-        <p>Gemini AI ile İngilizce kelimeler için quiz soruları oluşturun (Yeni Format)</p>
+        <p>Gemini AI ile İngilizce kelime kombinasyonları için quiz soruları oluşturun</p>
         {process.env.NODE_ENV === 'development' && (
           <small style={{opacity: 0.7}}>Backend: {config.API_URL}</small>
         )}
       </header>
 
+      {/* ✅ SADECE TEK TAB - DİĞER TABLER KALDIRILDI */}
       <nav className="tabs">
-        <button 
-          className={`tab ${activeTab === 'combinations' ? 'active' : ''}`}
-          onClick={() => setActiveTab('combinations')}
-        >
-          📋 Kelime Kombinasyonları ({totalWords})
-        </button>
-        <button 
-          className={`tab ${activeTab === 'words' ? 'active' : ''}`}
-          onClick={() => setActiveTab('words')}
-        >
-          📚 Sözcükler
-        </button>
-        <button 
-          className={`tab ${activeTab === 'pos' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pos')}
-        >
-          🏷️ Part of Speech
-        </button>
-        <button 
-          className={`tab ${activeTab === 'definitions' ? 'active' : ''}`}
-          onClick={() => setActiveTab('definitions')}
-        >
-          📝 Tanımlar
+        <button className="tab active">
+          📋 Kelime Kombinasyonları ({totalCombinations.toLocaleString()})
         </button>
       </nav>
 
       <main className="main-content">
-        {activeTab === 'combinations' && (
-          <div className="tab-content">
-            {/* YENİ: Filtre Kontrolleri */}
-            <div className="filter-controls" style={{
-              marginBottom: '1rem', 
-              padding: '1rem', 
-              background: 'white', 
-              borderRadius: '8px', 
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              display: 'flex',
-              gap: '1rem',
-              alignItems: 'center',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                <span style={{fontWeight: '500', color: '#374151'}}>Final Zorluk:</span>
-                <select 
-                  value={difficultyFilter} 
-                  onChange={(e) => {
-                    setDifficultyFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  style={{
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    backgroundColor: 'white',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {difficultyLevels.map(level => (
-                    <option key={level} value={level}>
-                      {level === 'all' ? 'Tümü' : level.charAt(0).toUpperCase() + level.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                <span style={{fontWeight: '500', color: '#374151'}}>Kaynak:</span>
-                <select 
-                  value={sourceFilter} 
-                  onChange={(e) => {
-                    setSourceFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  style={{
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    backgroundColor: 'white',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {uniqueSources.map(source => (
-                    <option key={source} value={source}>
-                      {source === 'all' ? 'Tümü' : getSourceBadge(source)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                <span style={{fontWeight: '500', color: '#374151'}}>Analiz:</span>
-                <select 
-                  value={methodFilter} 
-                  onChange={(e) => {
-                    setMethodFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  style={{
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    backgroundColor: 'white',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {uniqueMethods.map(method => (
-                    <option key={method} value={method}>
-                      {method === 'all' ? 'Tümü' : getAnalysisMethodBadge(method)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{fontSize: '0.9rem', color: '#6b7280', marginLeft: 'auto'}}>
-                <strong>{filteredWords.length}</strong> kelime ({selectedWordIds.size} seçili)
-              </div>
+        <div className="tab-content">
+          {/* YENİ: Filtre Kontrolleri */}
+          <div className="filter-controls" style={{
+            marginBottom: '1rem', 
+            padding: '1rem', 
+            background: 'white', 
+            borderRadius: '8px', 
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            display: 'flex',
+            gap: '1rem',
+            alignItems: 'center',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+              <span style={{fontWeight: '500', color: '#374151'}}>Final Zorluk:</span>
+              <select 
+                value={difficultyFilter} 
+                onChange={(e) => {
+                  setDifficultyFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: '0.5rem',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '0.9rem',
+                  backgroundColor: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                {difficultyLevels.map(level => (
+                  <option key={level} value={level}>
+                    {level === 'all' ? 'Tümü' : level.charAt(0).toUpperCase() + level.slice(1)}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* Sayfa Kontrolleri */}
-            <div className="pagination-controls" style={{
-              marginBottom: '1rem', 
-              padding: '1rem', 
-              background: 'white', 
-              borderRadius: '8px', 
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '1rem'
-            }}>
-              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                <span style={{fontWeight: '500', color: '#374151'}}>Sayfa başına:</span>
-                <select 
-                  value={itemsPerPage} 
-                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                  style={{
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    backgroundColor: 'white',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {pageSizeOptions.map(size => (
-                    <option key={size} value={size}>{size} madde</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div style={{fontSize: '0.9rem', color: '#6b7280'}}>
-                <strong>{itemsPerPage * (currentPage - 1) + 1} - {Math.min(itemsPerPage * currentPage, filteredWords.length)}</strong> / {filteredWords.length} kelime gösteriliyor
-                <span style={{marginLeft: '0.5rem', fontSize: '0.8rem', color: '#9ca3af'}}>
-                  (Sayfa: {currentPage}/{getTotalPages()})
+            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+              <span style={{fontWeight: '500', color: '#374151'}}>Kaynak:</span>
+              <select 
+                value={sourceFilter} 
+                onChange={(e) => {
+                  setSourceFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: '0.5rem',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '0.9rem',
+                  backgroundColor: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                {uniqueSources.map(source => (
+                  <option key={source} value={source}>
+                    {source === 'all' ? 'Tümü' : getSourceBadge(source)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+              <span style={{fontWeight: '500', color: '#374151'}}>Analiz:</span>
+              <select 
+                value={methodFilter} 
+                onChange={(e) => {
+                  setMethodFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: '0.5rem',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '0.9rem',
+                  backgroundColor: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                {uniqueMethods.map(method => (
+                  <option key={method} value={method}>
+                    {method === 'all' ? 'Tümü' : getAnalysisMethodBadge(method)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{fontSize: '0.9rem', color: '#6b7280', marginLeft: 'auto'}}>
+              <strong>{filteredCombinations.toLocaleString()}</strong> kombinasyon ({selectedWordIds.size} seçili)
+            </div>
+          </div>
+
+          {/* Sayfa Kontrolleri */}
+          <div className="pagination-controls" style={{
+            marginBottom: '1rem', 
+            padding: '1rem', 
+            background: 'white', 
+            borderRadius: '8px', 
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1rem'
+          }}>
+            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+              <span style={{fontWeight: '500', color: '#374151'}}>Sayfa başına:</span>
+              <select 
+                value={itemsPerPage} 
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                style={{
+                  padding: '0.5rem',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '0.9rem',
+                  backgroundColor: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                {pageSizeOptions.map(size => (
+                  <option key={size} value={size}>{size} madde</option>
+                ))}
+              </select>
+            </div>
+            
+            <div style={{fontSize: '0.9rem', color: '#6b7280'}}>
+              <strong>{itemsPerPage * (currentPage - 1) + 1} - {Math.min(itemsPerPage * currentPage, filteredWords.length)}</strong> / {filteredWords.length.toLocaleString()} kombinasyon gösteriliyor
+              <span style={{marginLeft: '0.5rem', fontSize: '0.8rem', color: '#9ca3af'}}>
+                (Sayfa: {currentPage}/{getTotalPages()})
+              </span>
+              {selectedWordIds.size > 0 && (
+                <span style={{marginLeft: '1rem', color: '#059669', fontWeight: '600'}}>
+                  | {selectedWordIds.size} kombinasyon seçili
                 </span>
-                {selectedWordIds.size > 0 && (
-                  <span style={{marginLeft: '1rem', color: '#059669', fontWeight: '600'}}>
-                    | {selectedWordIds.size} kelime seçili
-                  </span>
-                )}
-              </div>
+              )}
             </div>
+          </div>
 
-            {/* YENİ TABLO YAPISI */}
-            <div className="table-container">
-              <table className="words-table">
-                <thead>
-                  <tr>
-                    <th>
+          {/* YENİ TABLO YAPISI */}
+          <div className="table-container">
+            <table className="words-table">
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={isAllCurrentPageSelected()}
+                      onChange={handleSelectAll}
+                      disabled={isGenerating}
+                    />
+                  </th>
+                  <th onClick={() => handleSort('word')} className="sortable">
+                    Kelime {getSortIcon('word')}
+                  </th>
+                  <th onClick={() => handleSort('turkish_meaning')} className="sortable">
+                    Türkçe Anlam {getSortIcon('turkish_meaning')}
+                  </th>
+                  <th onClick={() => handleSort('part_of_speech')} className="sortable">
+                    Tür {getSortIcon('part_of_speech')}
+                  </th>
+                  <th>Anlam Açıklaması</th>
+                  <th onClick={() => handleSort('initial_difficulty')} className="sortable">
+                    İlk Zorluk {getSortIcon('initial_difficulty')}
+                  </th>
+                  <th onClick={() => handleSort('final_difficulty')} className="sortable">
+                    Final Zorluk {getSortIcon('final_difficulty')}
+                  </th>
+                  <th>İngilizce Örnek</th>
+                  <th>Türkçe Örnek</th>
+                  <th onClick={() => handleSort('source')} className="sortable">
+                    Kaynak {getSortIcon('source')}
+                  </th>
+                  <th onClick={() => handleSort('analysis_method')} className="sortable">
+                    Analiz {getSortIcon('analysis_method')}
+                  </th>
+                  <th onClick={() => handleSort('times_shown')} className="sortable">
+                    Gösterilme {getSortIcon('times_shown')}
+                  </th>
+                  <th onClick={() => handleSort('question_count')} className="sortable">
+                    Soru Sayısı {getSortIcon('question_count')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentPageWords.map((word) => (
+                  <tr key={word.id} className={selectedWordIds.has(word.id) ? 'selected' : ''}>
+                    <td>
                       <input
                         type="checkbox"
-                        checked={isAllCurrentPageSelected()}
-                        onChange={handleSelectAll}
+                        checked={selectedWordIds.has(word.id)}
+                        onChange={() => handleSelectWord(word.id)}
                         disabled={isGenerating}
                       />
-                    </th>
-                    <th onClick={() => handleSort('word')} className="sortable">
-                      Kelime {getSortIcon('word')}
-                    </th>
-                    <th onClick={() => handleSort('turkish_meaning')} className="sortable">
-                      Türkçe Anlam {getSortIcon('turkish_meaning')}
-                    </th>
-                    <th onClick={() => handleSort('part_of_speech')} className="sortable">
-                      Tür {getSortIcon('part_of_speech')}
-                    </th>
-                    <th>Anlam Açıklaması</th>
-                    <th onClick={() => handleSort('initial_difficulty')} className="sortable">
-                      İlk Zorluk {getSortIcon('initial_difficulty')}
-                    </th>
-                    <th onClick={() => handleSort('final_difficulty')} className="sortable">
-                      Final Zorluk {getSortIcon('final_difficulty')}
-                    </th>
-                    <th>İngilizce Örnek</th>
-                    <th>Türkçe Örnek</th>
-                    <th onClick={() => handleSort('source')} className="sortable">
-                      Kaynak {getSortIcon('source')}
-                    </th>
-                    <th onClick={() => handleSort('analysis_method')} className="sortable">
-                      Analiz {getSortIcon('analysis_method')}
-                    </th>
-                    <th onClick={() => handleSort('times_shown')} className="sortable">
-                      Gösterilme {getSortIcon('times_shown')}
-                    </th>
-                    <th onClick={() => handleSort('question_count')} className="sortable">
-                      Soru Sayısı {getSortIcon('question_count')}
-                    </th>
+                    </td>
+                    <td className="word-cell">
+                      <strong>{word.word}</strong>
+                      <div style={{fontSize: '0.8rem', color: '#9ca3af'}}>
+                        Meaning ID: {word.meaning_id}
+                      </div>
+                    </td>
+                    <td className="definition-cell">
+                      {word.turkish_meaning}
+                    </td>
+                    <td className="pos-cell">
+                      <span className="pos-tag">{word.part_of_speech}</span>
+                    </td>
+                    <td className="description-cell" style={{maxWidth: '200px', fontSize: '0.9rem', color: '#475569'}}>
+                      {word.meaning_description}
+                    </td>
+                    <td>
+                      <span 
+                        className="difficulty-badge"
+                        style={{
+                          background: getDifficultyColor(word.initial_difficulty),
+                          color: 'white',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '9999px',
+                          fontSize: '0.7rem',
+                          fontWeight: '600',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {word.initial_difficulty}
+                      </span>
+                    </td>
+                    <td>
+                      <span 
+                        className="difficulty-badge"
+                        style={{
+                          background: getDifficultyColor(word.final_difficulty),
+                          color: 'white',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '9999px',
+                          fontSize: '0.7rem',
+                          fontWeight: '600',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {word.final_difficulty}
+                      </span>
+                    </td>
+                    <td className="example-cell" style={{maxWidth: '250px', fontSize: '0.85rem', color: '#475569'}}>
+                      {word.english_example}
+                    </td>
+                    <td className="example-cell" style={{maxWidth: '250px', fontSize: '0.85rem', color: '#475569'}}>
+                      {word.turkish_sentence}
+                    </td>
+                    <td>
+                      <span style={{fontSize: '0.8rem', color: '#6b7280'}}>
+                        {getSourceBadge(word.source)}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{fontSize: '0.8rem', color: '#6b7280'}}>
+                        {getAnalysisMethodBadge(word.analysis_method)}
+                      </span>
+                    </td>
+                    <td className="count-cell" style={{textAlign: 'center'}}>
+                      <div style={{fontSize: '0.9rem'}}>
+                        <div>{word.times_shown}</div>
+                        {word.times_shown > 0 && (
+                          <div style={{fontSize: '0.75rem', color: '#10b981'}}>
+                            {getSuccessRate(word.times_correct, word.times_shown)}% doğru
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="count-cell">
+                      <span className={`count-badge ${word.question_count > 0 ? 'has-questions' : 'no-questions'}`}>
+                        {word.question_count}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {currentPageWords.map((word) => (
-                    <tr key={word.id} className={selectedWordIds.has(word.id) ? 'selected' : ''}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={selectedWordIds.has(word.id)}
-                          onChange={() => handleSelectWord(word.id)}
-                          disabled={isGenerating}
-                        />
-                      </td>
-                      <td className="word-cell">
-                        <strong>{word.word}</strong>
-                        <div style={{fontSize: '0.8rem', color: '#9ca3af'}}>
-                          ID: {word.meaning_id}
-                        </div>
-                      </td>
-                      <td className="definition-cell">
-                        {word.turkish_meaning}
-                      </td>
-                      <td className="pos-cell">
-                        <span className="pos-tag">{word.part_of_speech}</span>
-                      </td>
-                      <td className="description-cell" style={{maxWidth: '200px', fontSize: '0.9rem', color: '#475569'}}>
-                        {word.meaning_description}
-                      </td>
-                      <td>
-                        <span 
-                          className="difficulty-badge"
-                          style={{
-                            background: getDifficultyColor(word.initial_difficulty),
-                            color: 'white',
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '9999px',
-                            fontSize: '0.7rem',
-                            fontWeight: '600',
-                            textTransform: 'capitalize'
-                          }}
-                        >
-                          {word.initial_difficulty}
-                        </span>
-                      </td>
-                      <td>
-                        <span 
-                          className="difficulty-badge"
-                          style={{
-                            background: getDifficultyColor(word.final_difficulty),
-                            color: 'white',
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '9999px',
-                            fontSize: '0.7rem',
-                            fontWeight: '600',
-                            textTransform: 'capitalize'
-                          }}
-                        >
-                          {word.final_difficulty}
-                        </span>
-                      </td>
-                      <td className="example-cell" style={{maxWidth: '250px', fontSize: '0.85rem', color: '#475569'}}>
-                        {word.english_example}
-                      </td>
-                      <td className="example-cell" style={{maxWidth: '250px', fontSize: '0.85rem', color: '#475569'}}>
-                        {word.turkish_sentence}
-                      </td>
-                      <td>
-                        <span style={{fontSize: '0.8rem', color: '#6b7280'}}>
-                          {getSourceBadge(word.source)}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{fontSize: '0.8rem', color: '#6b7280'}}>
-                          {getAnalysisMethodBadge(word.analysis_method)}
-                        </span>
-                      </td>
-                      <td className="count-cell" style={{textAlign: 'center'}}>
-                        <div style={{fontSize: '0.9rem'}}>
-                          <div>{word.times_shown}</div>
-                          {word.times_shown > 0 && (
-                            <div style={{fontSize: '0.75rem', color: '#10b981'}}>
-                              {getSuccessRate(word.times_correct, word.times_shown)}% doğru
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="count-cell">
-                        <span className={`count-badge ${word.question_count > 0 ? 'has-questions' : 'no-questions'}`}>
-                          {word.question_count}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-            {/* Pagination */}
-            <div className="pagination" style={{
-              marginTop: '1rem', 
-              textAlign: 'center',
-              padding: '1rem',
-              background: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: '0.5rem',
-              flexWrap: 'wrap'
-            }}>
-              <button 
-                onClick={() => goToPage(currentPage - 1)}
-                disabled={currentPage === 1}
-                style={{
-                  padding: '0.5rem 1rem', 
-                  border: '1px solid #d1d5db', 
-                  background: currentPage === 1 ? '#f9fafb' : 'white', 
-                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                  borderRadius: '6px',
-                  color: currentPage === 1 ? '#9ca3af' : '#374151',
-                  fontWeight: '500'
-                }}
-              >
-                ◀ Önceki
-              </button>
-              
-              {totalPages > 1 && Array.from({length: Math.min(7, totalPages)}, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 7) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 4) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 3) {
-                  pageNum = totalPages - 6 + i;
-                } else {
-                  pageNum = currentPage - 3 + i;
-                }
-                
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => goToPage(pageNum)}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      border: '1px solid #d1d5db',
-                      background: currentPage === pageNum ? '#6366f1' : 'white',
-                      color: currentPage === pageNum ? 'white' : '#374151',
-                      cursor: 'pointer',
-                      borderRadius: '6px',
-                      fontWeight: currentPage === pageNum ? '600' : '500',
-                      minWidth: '40px'
-                    }}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-              
-              <button 
-                onClick={() => goToPage(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                style={{
-                  padding: '0.5rem 1rem', 
-                  border: '1px solid #d1d5db', 
-                  background: currentPage === totalPages ? '#f9fafb' : 'white', 
-                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                  borderRadius: '6px',
-                  color: currentPage === totalPages ? '#9ca3af' : '#374151',
-                  fontWeight: '500'
-                }}
-              >
-                Sonraki ▶
-              </button>
-              
-              <span style={{
-                marginLeft: '1rem', 
-                color: '#6b7280',
-                fontSize: '0.9rem',
-                fontWeight: '500',
-                padding: '0.5rem'
-              }}>
-                Sayfa {currentPage} / {totalPages} 
-                <span style={{marginLeft: '0.5rem', color: '#9ca3af'}}>
-                  (Toplam: {filteredWords.length} kelime)
-                </span>
-              </span>
-            </div>
-          </div>
-        )}
-        
-        {activeTab === 'words' && (
-          <div className="tab-content">
-            <h3>Sözcükler Sekmesi</h3>
-            <p>Bu sekme henüz geliştirilecek...</p>
-          </div>
-        )}
-        
-        {activeTab === 'pos' && (
-          <div className="tab-content">
-            <h3>Part of Speech Sekmesi</h3>
-            <p>Bu sekme henüz geliştirilecek...</p>
-          </div>
-        )}
-        
-        {activeTab === 'definitions' && (
-          <div className="tab-content">
-            <h3>Tanımlar Sekmesi</h3>
-            <p>Bu sekme henüz geliştirilecek...</p>
-          </div>
-        )}
-      </main>
-
-      {activeTab === 'combinations' && (
-        <div className="action-bar">
-          <div className="selection-info">
-            <span>
-              {selectedWordIds.size > 0 
-                ? `${selectedWordIds.size} kelime seçildi` 
-                : 'Kelime seçilmedi'
+          {/* Pagination */}
+          <div className="pagination" style={{
+            marginTop: '1rem', 
+            textAlign: 'center',
+            padding: '1rem',
+            background: 'white',
+            borderRadius: '8px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '0.5rem',
+            flexWrap: 'wrap'
+          }}>
+            <button 
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              style={{
+                padding: '0.5rem 1rem', 
+                border: '1px solid #d1d5db', 
+                background: currentPage === 1 ? '#f9fafb' : 'white', 
+                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                color: currentPage === 1 ? '#9ca3af' : '#374151',
+                fontWeight: '500'
+              }}
+            >
+              ◀ Önceki
+            </button>
+            
+            {totalPages > 1 && Array.from({length: Math.min(7, totalPages)}, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 7) {
+                pageNum = i + 1;
+              } else if (currentPage <= 4) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 3) {
+                pageNum = totalPages - 6 + i;
+              } else {
+                pageNum = currentPage - 3 + i;
               }
-            </span>
-            {isGenerating && (
-              <div style={{color: '#f59e0b', fontWeight: 'bold'}}>
-                🔄 Sorular oluşturuluyor... (Doğru şıklar otomatik belirleniyor)
-              </div>
-            )}
-          </div>
-          
-          <button 
-            onClick={handleGenerateQuestions}
-            disabled={selectedWordIds.size === 0 || isGenerating}
-            className="generate-btn"
-          >
-            {isGenerating 
-              ? '⏳ Oluşturuluyor...' 
-              : `🤖 Yeni Format Sorular Oluştur (${selectedWordIds.size})`
-            }
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default App;
+              
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => goToPage(pageNum)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    border: '1px solid #d1d5db',
+                    background: currentPage === pageNum ? '#6366f1' : 'white',
+                    color: currentPage === pageNum ? 'white' : '#374151',
+                    cursor: 'pointer',
+                    borderRadius: '6px',
+                    fontWeight: currentPage === pageNum ? '600' : '500',
+                    minWidth: '40px'
+                  }}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            
+            <button 
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              style={{
+                padding: '0.5rem 1rem', 
+                border: '1px solid #d1d5db', 
+                background: currentPage === totalPages ? '#f9fafb' : 'white', 
+                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                borderRadius: '6px',
+                color: currentPage === totalPages ? '#9ca3af' : '#374151',
+                fontWeight: '500'
+              }}
+            >
+              Sonraki ▶
+            </button>
+            
+            <span style={{
+              marginLeft: '1rem', 
+              color: '#6b7280',
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              padding: '0.5rem'
+            }}>
+              Sayfa {currentPage} / {totalPages} 
+              <span style={{marginLeft: '0.5rem', color: '#9ca3af'}
