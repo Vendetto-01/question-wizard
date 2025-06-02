@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
 
-// GET /api/words - Sadeleştirilmiş kelime listesi
+// GET /api/words - TÜM KELİMELERİ GETİR (LİMİT YOK)
 router.get('/', async (req, res) => {
   try {
+    console.log('🔍 Tüm aktif kelimeler getiriliyor...');
+    
     const { data: words, error } = await req.supabase
       .from('words')
       .select(`
@@ -20,10 +22,14 @@ router.get('/', async (req, res) => {
       `)
       .eq('is_active', true)
       .order('word', { ascending: true });
+      // ☝️ DİKKAT: .limit() KULLANILMIYOR!
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Supabase hatası:', error);
+      throw error;
+    }
 
-    // Soru sayısını düzelt ve sadece gerekli alanları döndür
+    // Soru sayısını düzelt
     const formattedData = words.map(word => ({
       id: word.id,
       word: word.word,
@@ -37,19 +43,20 @@ router.get('/', async (req, res) => {
       question_count: word.questions?.[0]?.count || 0
     }));
 
-    console.log(`✅ ${formattedData.length} kelime kombinasyonu getirildi`);
+    console.log(`✅ TOPLAM ${formattedData.length} kelime kombinasyonu getirildi`);
 
     res.json({
       words: formattedData,
       total: formattedData.length,
-      message: 'Words başarıyla getirildi'
+      message: `${formattedData.length} kelime başarıyla getirildi`
     });
 
   } catch (error) {
     console.error('❌ Words listesi hatası:', error);
     res.status(500).json({
       error: 'Words listesi alınırken hata oluştu',
-      message: error.message
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
