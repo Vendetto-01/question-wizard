@@ -1,12 +1,77 @@
 const express = require('express');
 const router = express.Router();
 
-// GET /api/words - TÜM KELİMELERİ GETİR (LİMİT YOK)
+// DEBUG: Supabase bağlantısını test et
+router.get('/debug', async (req, res) => {
+  try {
+    console.log('🔍 DEBUG: Supabase connection test...');
+    
+    // Önce toplam sayı kontrolü
+    const { count, error: countError } = await req.supabase
+      .from('words')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+
+    if (countError) {
+      console.error('❌ Count error:', countError);
+      return res.status(500).json({ error: 'Count hatası', details: countError });
+    }
+
+    console.log(`📊 Toplam aktif words sayısı: ${count}`);
+
+    // Şimdi gerçek veriyi çek (limit olmadan)
+    const { data: words, error: dataError } = await req.supabase
+      .from('words')
+      .select('id, word, meaning_id, is_active')
+      .eq('is_active', true)
+      .order('word', { ascending: true });
+
+    if (dataError) {
+      console.error('❌ Data error:', dataError);
+      return res.status(500).json({ error: 'Data hatası', details: dataError });
+    }
+
+    console.log(`📦 Gelen data length: ${words?.length || 0}`);
+
+    res.json({
+      debug: true,
+      totalCountFromDB: count,
+      actualDataLength: words?.length || 0,
+      isLimited: (words?.length || 0) < count,
+      firstFew: words?.slice(0, 5).map(w => ({ id: w.id, word: w.word, meaning_id: w.meaning_id })),
+      message: words?.length === count ? 'Tüm veri geldi ✅' : '⚠️ Veri kesiliyor, limit var!'
+    });
+
+  } catch (error) {
+    console.error('❌ Debug hatası:', error);
+    res.status(500).json({
+      error: 'Debug hatası',
+      message: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// GET /api/words - Ana endpoint (geliştirilmiş debug ile)
 router.get('/', async (req, res) => {
   try {
-    console.log('🔍 Tüm aktif kelimeler getiriliyor...');
+    console.log('🔍 Words endpoint çağrıldı...');
     
-    const { data: words, error } = await req.supabase
+    // Önce count al
+    const { count, error: countError } = await req.supabase
+      .from('words')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+
+    if (countError) {
+      console.error('❌ Count error:', countError);
+      throw countError;
+    }
+
+    console.log(`📊 Veritabanında toplam ${count} aktif kelime var`);
+
+    // Veriyi çek
+    const { data: wordsData, error: dataError } = await req.supabase
       .from('words')
       .select(`
         id,
@@ -22,15 +87,21 @@ router.get('/', async (req, res) => {
       `)
       .eq('is_active', true)
       .order('word', { ascending: true });
-      // ☝️ DİKKAT: .limit() KULLANILMIYOR!
 
-    if (error) {
-      console.error('❌ Supabase hatası:', error);
-      throw error;
+    if (dataError) {
+      console.error('❌ Data error:', dataError);
+      throw dataError;
     }
 
-    // Soru sayısını düzelt
-    const formattedData = words.map(word => ({
+    console.log(`📦 API'den ${wordsData?.length || 0} kelime geldi`);
+
+    if ((wordsData?.length || 0) < count) {
+      console.warn('⚠️ DİKKAT: Gelen veri sayısı, toplam sayıdan az!');
+      console.warn(`⚠️ Beklenen: ${count}, Gelen: ${wordsData?.length || 0}`);
+    }
+
+    // Format data
+    const formattedData = (wordsData || []).map(word => ({
       id: word.id,
       word: word.word,
       meaning_id: word.meaning_id,
@@ -43,16 +114,18 @@ router.get('/', async (req, res) => {
       question_count: word.questions?.[0]?.count || 0
     }));
 
-    console.log(`✅ TOPLAM ${formattedData.length} kelime kombinasyonu getirildi`);
+    console.log(`✅ ${formattedData.length} kelime formatlandı ve gönderiliyor`);
 
     res.json({
       words: formattedData,
       total: formattedData.length,
-      message: `${formattedData.length} kelime başarıyla getirildi`
+      dbTotal: count,
+      isComplete: formattedData.length === count,
+      message: `${formattedData.length} kelime getirildi (DB'de toplam: ${count})`
     });
 
   } catch (error) {
-    console.error('❌ Words listesi hatası:', error);
+    console.error('❌ Words endpoint hatası:', error);
     res.status(500).json({
       error: 'Words listesi alınırken hata oluştu',
       message: error.message,
