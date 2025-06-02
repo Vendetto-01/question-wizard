@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import config from './config';
 
-// GÜNCELLENMIŞ TYPES - YENİ TABLO YAPISINA GÖRE
+// Sadeleştirilmiş Types - Sadece kullanılan alanlar
 interface Word {
   id: number;
   word: string;
@@ -10,18 +10,9 @@ interface Word {
   part_of_speech: string;
   meaning_description: string;
   english_example: string;
-  turkish_sentence: string;
   turkish_meaning: string;
-  initial_difficulty: string;
-  final_difficulty: string;
-  difficulty_reasoning: string;
-  analysis_method: string;
-  source: string;
-  times_shown: number;
-  times_correct: number;
   is_active: boolean;
   created_at: string;
-  updated_at: string;
   question_count: number;
 }
 
@@ -50,12 +41,7 @@ interface ApiResponse {
 
 interface QuestionsApiResponse {
   questions: Question[];
-  pagination?: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
+  total: number;
 }
 
 const App: React.FC = () => {
@@ -72,10 +58,9 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
-  // Sayfa boyutu seçenekleri
   const pageSizeOptions = [10, 20, 30, 50];
 
-  // Fetch words and questions from backend
+  // Fetch data
   useEffect(() => {
     Promise.all([fetchWords(), fetchQuestions()]);
   }, []);
@@ -105,7 +90,7 @@ const App: React.FC = () => {
 
   const fetchQuestions = async () => {
     try {
-      const response = await fetch(`${config.API_URL}${config.ENDPOINTS.QUESTIONS}?limit=1000`);
+      const response = await fetch(`${config.API_URL}${config.ENDPOINTS.QUESTIONS}?limit=2000`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -152,7 +137,7 @@ const App: React.FC = () => {
     const confirmed = window.confirm(
       `${selectedWordIds.size} kelime kombinasyonu için sorular oluşturulsun mu?\n\n` +
       `⚠️ Bu işlem ${selectedWordIds.size} dakika kadar sürebilir.\n\n` +
-      `🤖 Gemini AI ile yeni format soruları oluşturulacak.`
+      `🤖 Gemini AI ile sorular oluşturulacak.`
     );
     if (!confirmed) return;
 
@@ -253,12 +238,11 @@ const App: React.FC = () => {
     setCurrentPage(1);
   };
 
-  // İstatistik hesaplama fonksiyonları
-  const getWordsStats = () => {
-    const total = words.length;
-    const withQuestions = words.filter(w => w.question_count > 0).length;
-    const withoutQuestions = total - withQuestions;
-    const totalQuestions = words.reduce((sum, w) => sum + w.question_count, 0);
+  // Basit istatistikler
+  const getStats = () => {
+    const totalWords = words.length;
+    const wordsWithQuestions = words.filter(w => w.question_count > 0).length;
+    const totalQuestions = questions.length;
     
     // Part of Speech dağılımı
     const posCount: Record<string, number> = {};
@@ -266,36 +250,19 @@ const App: React.FC = () => {
       posCount[w.part_of_speech] = (posCount[w.part_of_speech] || 0) + 1;
     });
 
-    // Zorluk dağılımı
-    const difficultyCount: Record<string, number> = {};
-    words.forEach(w => {
-      difficultyCount[w.final_difficulty] = (difficultyCount[w.final_difficulty] || 0) + 1;
+    // Doğru şık dağılımı
+    const correctAnswerCount: Record<string, number> = {};
+    questions.forEach(q => {
+      correctAnswerCount[q.correct_answer] = (correctAnswerCount[q.correct_answer] || 0) + 1;
     });
 
     return {
-      total,
-      withQuestions,
-      withoutQuestions,
+      totalWords,
+      wordsWithQuestions,
+      wordsWithoutQuestions: totalWords - wordsWithQuestions,
       totalQuestions,
       posCount,
-      difficultyCount
-    };
-  };
-
-  const getQuestionsStats = () => {
-    const total = questions.length;
-    const byDifficulty: Record<string, number> = {};
-    const byCorrectAnswer: Record<string, number> = {};
-    
-    questions.forEach(q => {
-      byDifficulty[q.difficulty] = (byDifficulty[q.difficulty] || 0) + 1;
-      byCorrectAnswer[q.correct_answer] = (byCorrectAnswer[q.correct_answer] || 0) + 1;
-    });
-
-    return {
-      total,
-      byDifficulty,
-      byCorrectAnswer
+      correctAnswerCount
     };
   };
 
@@ -328,8 +295,7 @@ const App: React.FC = () => {
 
   const currentPageWords = getCurrentPageWords();
   const totalPages = getTotalPages();
-  const wordsStats = getWordsStats();
-  const questionsStats = getQuestionsStats();
+  const stats = getStats();
 
   return (
     <div className="app">
@@ -348,14 +314,14 @@ const App: React.FC = () => {
       </nav>
 
       <main className="main-content">
-        {/* 📊 İSTATİSTİK KARTLARI */}
+        {/* İstatistik Kartları */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
           gap: '1rem',
           marginBottom: '2rem'
         }}>
-          {/* Words Tablosu İstatistikleri */}
+          {/* Words Stats */}
           <div style={{
             background: 'white',
             padding: '1.5rem',
@@ -369,26 +335,22 @@ const App: React.FC = () => {
             <div style={{display: 'grid', gap: '0.5rem', fontSize: '0.9rem'}}>
               <div style={{display: 'flex', justifyContent: 'space-between'}}>
                 <span>Toplam Kombinasyon:</span>
-                <strong style={{color: '#3b82f6'}}>{wordsStats.total.toLocaleString()}</strong>
+                <strong style={{color: '#3b82f6'}}>{stats.totalWords.toLocaleString()}</strong>
               </div>
               <div style={{display: 'flex', justifyContent: 'space-between'}}>
                 <span>Sorulu:</span>
-                <strong style={{color: '#10b981'}}>{wordsStats.withQuestions.toLocaleString()}</strong>
+                <strong style={{color: '#10b981'}}>{stats.wordsWithQuestions.toLocaleString()}</strong>
               </div>
               <div style={{display: 'flex', justifyContent: 'space-between'}}>
                 <span>Sorusuz:</span>
-                <strong style={{color: '#ef4444'}}>{wordsStats.withoutQuestions.toLocaleString()}</strong>
-              </div>
-              <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                <span>Toplam Soru:</span>
-                <strong style={{color: '#8b5cf6'}}>{wordsStats.totalQuestions.toLocaleString()}</strong>
+                <strong style={{color: '#ef4444'}}>{stats.wordsWithoutQuestions.toLocaleString()}</strong>
               </div>
               
               <hr style={{margin: '0.5rem 0', border: 'none', borderTop: '1px solid #e5e7eb'}} />
               
               <div style={{fontSize: '0.8rem', color: '#6b7280'}}>
                 <div><strong>Part of Speech:</strong></div>
-                {Object.entries(wordsStats.posCount).map(([pos, count]) => (
+                {Object.entries(stats.posCount).map(([pos, count]) => (
                   <div key={pos} style={{display: 'flex', justifyContent: 'space-between', paddingLeft: '0.5rem'}}>
                     <span>{pos}:</span>
                     <span>{count}</span>
@@ -398,7 +360,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Questions Tablosu İstatistikleri */}
+          {/* Questions Stats */}
           <div style={{
             background: 'white',
             padding: '1.5rem',
@@ -412,22 +374,14 @@ const App: React.FC = () => {
             <div style={{display: 'grid', gap: '0.5rem', fontSize: '0.9rem'}}>
               <div style={{display: 'flex', justifyContent: 'space-between'}}>
                 <span>Toplam Soru:</span>
-                <strong style={{color: '#3b82f6'}}>{questionsStats.total.toLocaleString()}</strong>
+                <strong style={{color: '#3b82f6'}}>{stats.totalQuestions.toLocaleString()}</strong>
               </div>
               
               <hr style={{margin: '0.5rem 0', border: 'none', borderTop: '1px solid #e5e7eb'}} />
               
               <div style={{fontSize: '0.8rem', color: '#6b7280'}}>
-                <div><strong>Zorluk Dağılımı:</strong></div>
-                {Object.entries(questionsStats.byDifficulty).map(([difficulty, count]) => (
-                  <div key={difficulty} style={{display: 'flex', justifyContent: 'space-between', paddingLeft: '0.5rem'}}>
-                    <span>{difficulty}:</span>
-                    <span>{count}</span>
-                  </div>
-                ))}
-                
-                <div style={{marginTop: '0.5rem'}}><strong>Doğru Şık Dağılımı:</strong></div>
-                {Object.entries(questionsStats.byCorrectAnswer).map(([answer, count]) => (
+                <div><strong>Doğru Şık Dağılımı:</strong></div>
+                {Object.entries(stats.correctAnswerCount).map(([answer, count]) => (
                   <div key={answer} style={{display: 'flex', justifyContent: 'space-between', paddingLeft: '0.5rem'}}>
                     <span>Şık {answer}:</span>
                     <span>{count}</span>
@@ -437,7 +391,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Seçim Durumu */}
+          {/* Selection Status */}
           <div style={{
             background: 'white',
             padding: '1.5rem',
@@ -483,7 +437,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Sayfa Kontrolleri */}
-        <div className="pagination-controls" style={{
+        <div style={{
           marginBottom: '1rem', 
           padding: '1rem', 
           background: 'white', 
@@ -525,7 +479,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* TABLO */}
+        {/* Tablo */}
         <div className="table-container">
           <table className="words-table">
             <thead>
@@ -568,7 +522,7 @@ const App: React.FC = () => {
                       disabled={isGenerating}
                     />
                   </td>
-                  <td className="word-cell">
+                  <td>
                     <strong style={{fontSize: '1.1rem', color: '#1f2937'}}>{word.word}</strong>
                   </td>
                   <td style={{textAlign: 'center', fontFamily: 'monospace', color: '#6b7280'}}>
@@ -578,7 +532,7 @@ const App: React.FC = () => {
                     {word.turkish_meaning}
                   </td>
                   <td>
-                    <span className="pos-tag" style={{
+                    <span style={{
                       background: '#e0e7ff',
                       color: '#3730a3',
                       padding: '0.25rem 0.75rem',
@@ -595,8 +549,8 @@ const App: React.FC = () => {
                   <td style={{maxWidth: '300px', fontSize: '0.85rem', color: '#475569', lineHeight: '1.4'}}>
                     {word.english_example}
                   </td>
-                  <td className="count-cell" style={{textAlign: 'center'}}>
-                    <span className={`count-badge ${word.question_count > 0 ? 'has-questions' : 'no-questions'}`} style={{
+                  <td style={{textAlign: 'center'}}>
+                    <span style={{
                       display: 'inline-block',
                       padding: '0.25rem 0.75rem',
                       borderRadius: '9999px',
@@ -615,7 +569,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Pagination */}
-        <div className="pagination" style={{
+        <div style={{
           marginTop: '1rem', 
           textAlign: 'center',
           padding: '1rem',

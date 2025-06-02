@@ -7,10 +7,9 @@ if (!process.env.GEMINI_API_KEY) {
   console.error('❌ GEMINI_API_KEY environment variable gerekli!');
 }
 
-// Gemini AI client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Gemini'den soru oluştur - YENİ BASIT VE TEMİZ YAPIYA GÖRE
+// Gemini'den soru oluştur - Sadeleştirilmiş
 async function generateQuestion(wordData) {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
@@ -23,17 +22,14 @@ Türkçe Anlamı: ${wordData.turkish_meaning}
 Kelime Türü: ${wordData.part_of_speech}
 Anlam Açıklaması: ${wordData.meaning_description}
 İngilizce Örnek Cümle: ${wordData.english_example}
-Türkçe Örnek Cümle: ${wordData.turkish_sentence}
-Zorluk Seviyesi: ${wordData.final_difficulty}
 
 Görev:
 1. Verilen İngilizce örnek cümleyi AYNEN kullan
 2. Soru: "Bu cümlede '${wordData.word}' kelimesinin anlamı nedir?"
 3. 4 şık oluştur: 1 doğru, 3 yanlış
 4. Doğru şık verilen Türkçe anlamı olacak
-5. Yanlış şıkları sen belirle (benzer olmaları gerekmiyor)
 
-SADECE JSON döndür, başka metin yazma:
+SADECE JSON döndür:
 
 {
   "paragraph": "${wordData.english_example}",
@@ -46,13 +42,10 @@ SADECE JSON döndür, başka metin yazma:
   },
   "correct_answer": "A",
   "explanation": "Kısa açıklama"
-}
-
-NOT: correct_answer kesinlikle A, B, C veya D olmalı ve doğru şıkkı göstermeli.`;
+}`;
 
     const result = await model.generateContent(prompt);
-    const response = result.response;
-    return response.text();
+    return result.response.text();
 
   } catch (error) {
     console.error(`Gemini API hatası (${wordData.word}):`, error.message);
@@ -60,38 +53,35 @@ NOT: correct_answer kesinlikle A, B, C veya D olmalı ve doğru şıkkı göster
   }
 }
 
-// Gemini response'unu parse et - YENİ FORMAT
+// Gemini response'unu parse et - Sadeleştirilmiş
 function parseGeminiResponse(response) {
   try {
-    // JSON'u temizle (bazen başında/sonunda extra metin olabiliyor)
-    let cleanJson = response.trim();
+    let cleanJson = response.trim()
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
     
-    // ```json ve ``` etiketlerini kaldır
-    cleanJson = cleanJson.replace(/```json\n?/g, '');
-    cleanJson = cleanJson.replace(/```\n?/g, '');
-    cleanJson = cleanJson.trim();
-    
-    // JSON parse et
     const jsonData = JSON.parse(cleanJson);
     
-    // Validation - gerekli alanlar var mı?
-    if (!jsonData.paragraph || !jsonData.question || !jsonData.options || 
-        !jsonData.correct_answer || !jsonData.explanation) {
-      throw new Error('JSON response eksik alanlar içeriyor');
+    // Basit validation
+    const required = ['paragraph', 'question', 'options', 'correct_answer', 'explanation'];
+    for (const field of required) {
+      if (!jsonData[field]) {
+        throw new Error(`Eksik alan: ${field}`);
+      }
     }
 
-    // Options kontrolü
-    if (!jsonData.options.A || !jsonData.options.B || 
-        !jsonData.options.C || !jsonData.options.D) {
-      throw new Error('Options A, B, C, D eksik');
+    const options = ['A', 'B', 'C', 'D'];
+    for (const option of options) {
+      if (!jsonData.options[option]) {
+        throw new Error(`Eksik şık: ${option}`);
+      }
     }
 
-    // Correct answer kontrolü
-    if (!['A', 'B', 'C', 'D'].includes(jsonData.correct_answer)) {
+    if (!options.includes(jsonData.correct_answer)) {
       throw new Error('correct_answer A, B, C veya D olmalı');
     }
     
-    // Yeni formatı döndür
     return {
       paragraph: jsonData.paragraph,
       question: jsonData.question,
@@ -99,7 +89,7 @@ function parseGeminiResponse(response) {
       option_b: jsonData.options.B,
       option_c: jsonData.options.C,
       option_d: jsonData.options.D,
-      correct_answer: jsonData.correct_answer, // A, B, C veya D
+      correct_answer: jsonData.correct_answer,
       explanation: jsonData.explanation
     };
     
@@ -110,54 +100,43 @@ function parseGeminiResponse(response) {
   }
 }
 
-// POST /api/questions/generate - Seçilen kelimeler için sorular oluştur
+// POST /api/questions/generate - Soru oluştur
 router.post('/generate', async (req, res) => {
   try {
     const { wordIds } = req.body;
 
-    // Input validation
+    // Basit validation
     if (!wordIds || !Array.isArray(wordIds) || wordIds.length === 0) {
       return res.status(400).json({
-        error: 'Kelime ID listesi gerekli',
-        message: 'wordIds array formatında olmalı ve boş olmamalı'
+        error: 'Kelime ID listesi gerekli'
       });
     }
 
     if (wordIds.length > 50) {
       return res.status(400).json({
-        error: 'Çok fazla kelime seçildi',
-        message: 'Maksimum 50 kelime için soru oluşturabilirsiniz'
+        error: 'Maksimum 50 kelime için soru oluşturabilirsiniz'
       });
     }
 
     console.log(`🚀 ${wordIds.length} kelime için soru oluşturma başladı...`);
 
-    // Yeni tablo yapısına göre kelime bilgilerini al
+    // Kelime bilgilerini al - Sadece gerekli alanlar
     const { data: words, error: wordsError } = await req.supabase
       .from('words')
       .select(`
-        id, 
-        word, 
-        meaning_id,
-        part_of_speech,
-        meaning_description,
-        english_example,
-        turkish_sentence,
-        turkish_meaning,
-        final_difficulty
+        id, word, meaning_id, part_of_speech, 
+        meaning_description, english_example, turkish_meaning
       `)
       .in('id', wordIds)
       .eq('is_active', true);
 
     if (wordsError) {
-      console.error('Supabase words fetch hatası:', wordsError);
       throw new Error(`Kelimeler alınamadı: ${wordsError.message}`);
     }
 
     if (!words || words.length === 0) {
       return res.status(404).json({
-        error: 'Seçilen kelimeler bulunamadı',
-        message: 'Belirtilen ID\'lerde aktif kelime bulunamadı'
+        error: 'Seçilen kelimeler bulunamadı'
       });
     }
 
@@ -171,13 +150,10 @@ router.post('/generate', async (req, res) => {
       try {
         console.log(`📝 [${i+1}/${words.length}] "${wordData.word}" için soru oluşturuluyor...`);
         
-        // Gemini'den soru oluştur
         const geminiResponse = await generateQuestion(wordData);
-        
-        // Response'u parse et
         const parsedQuestion = parseGeminiResponse(geminiResponse);
         
-        // Soruyu veritabanına kaydet - YENİ YAPIYA GÖRE
+        // Veritabanına kaydet
         const { data: question, error: insertError } = await req.supabase
           .from('questions')
           .insert({
@@ -188,9 +164,9 @@ router.post('/generate', async (req, res) => {
             option_b: parsedQuestion.option_b,
             option_c: parsedQuestion.option_c,
             option_d: parsedQuestion.option_d,
-            correct_answer: parsedQuestion.correct_answer, // A, B, C veya D
+            correct_answer: parsedQuestion.correct_answer,
             explanation: parsedQuestion.explanation,
-            difficulty: wordData.final_difficulty,
+            difficulty: 'intermediate', // Default değer
             is_active: true,
             created_at: new Date().toISOString()
           })
@@ -198,7 +174,6 @@ router.post('/generate', async (req, res) => {
           .single();
 
         if (insertError) {
-          console.error(`DB insert hatası (${wordData.word}):`, insertError);
           throw new Error(`Veritabanı hatası: ${insertError.message}`);
         }
 
@@ -206,20 +181,19 @@ router.post('/generate', async (req, res) => {
           word_id: wordData.id,
           word: wordData.word,
           question_id: question.id,
-          difficulty: wordData.final_difficulty,
           correct_answer: parsedQuestion.correct_answer,
           status: 'success'
         });
 
-        console.log(`✅ [${i+1}/${words.length}] "${wordData.word}" için soru başarıyla oluşturuldu (Doğru: ${parsedQuestion.correct_answer})`);
+        console.log(`✅ [${i+1}/${words.length}] "${wordData.word}" başarılı`);
 
-        // Rate limiting için kısa bekleme
+        // Rate limiting
         if (i < words.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
       } catch (error) {
-        console.error(`❌ "${wordData.word}" için soru oluşturulamadı:`, error.message);
+        console.error(`❌ "${wordData.word}" hata:`, error.message);
         errors.push({
           word_id: wordData.id,
           word: wordData.word,
@@ -229,7 +203,6 @@ router.post('/generate', async (req, res) => {
       }
     }
 
-    // Sonuç döndür
     console.log(`🎉 Tamamlandı: ${results.length} başarılı, ${errors.length} hatalı`);
     
     res.json({
@@ -251,74 +224,27 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// GET /api/questions/word/:wordId - Belirli bir kelime için soruları getir
-router.get('/word/:wordId', async (req, res) => {
+// GET /api/questions - Basit soru listesi
+router.get('/', async (req, res) => {
   try {
-    const { wordId } = req.params;
-
-    if (!wordId || isNaN(wordId)) {
-      return res.status(400).json({
-        error: 'Geçersiz kelime ID'
-      });
-    }
+    const limit = parseInt(req.query.limit) || 1000; // Yüksek default limit
 
     const { data: questions, error } = await req.supabase
       .from('questions')
       .select(`
-        *,
-        words(word, turkish_meaning, part_of_speech, meaning_description, english_example, final_difficulty)
+        id, word_id, paragraph, question_text, option_a, option_b, 
+        option_c, option_d, correct_answer, explanation, difficulty,
+        is_active, created_at, updated_at
       `)
-      .eq('word_id', wordId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Questions fetch hatası:', error);
-      throw error;
-    }
-
-    res.json({
-      word_id: parseInt(wordId),
-      questions: questions || [],
-      count: questions?.length || 0
-    });
-
-  } catch (error) {
-    console.error('❌ Questions fetch hatası:', error);
-    res.status(500).json({
-      error: 'Sorular alınırken hata oluştu',
-      message: error.message
-    });
-  }
-});
-
-// GET /api/questions - Tüm soruları getir (sayfalama ile)
-router.get('/', async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    const { data: questions, error, count } = await req.supabase
-      .from('questions')
-      .select(`
-        *,
-        words(word, turkish_meaning, part_of_speech, meaning_description, english_example, final_difficulty)
-      `, { count: 'exact' })
       .eq('is_active', true)
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .limit(limit);
 
     if (error) throw error;
 
     res.json({
       questions: questions || [],
-      pagination: {
-        page,
-        limit,
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limit)
-      }
+      total: questions?.length || 0
     });
 
   } catch (error) {
